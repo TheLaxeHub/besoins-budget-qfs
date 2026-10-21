@@ -1,0 +1,70 @@
+/* Compléments propres à l'application Besoins (la charte iris reste dans style.css). */
+.brej{background:var(--danger-soft);color:var(--fg-danger-strong);--bring:var(--danger-subtle)}
+.cat-b{display:inline-flex;align-items:center;gap:6px;font-weight:600;white-space:nowrap}
+.cat-b svg.lucide{width:14px;height:14px}
+.demo-pill{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--fg-warning);background:var(--warning-soft);border:1px solid var(--warning-subtle);padding:3px 9px;border-radius:999px}
+.sb-n{margin-left:auto;min-width:20px;height:20px;padding:0 6px;border-radius:999px;background:var(--warning);color:#fff;font-size:11px;font-weight:700;display:inline-flex;align-items:center;justify-content:center}
+.btn-sm{padding:6px 12px;font-size:13px}
+.lk{background:none;border:none;color:var(--body);text-decoration:underline;cursor:pointer;font-size:13px}
+
+/* Bandeau date limite */
+.dl-banner{display:flex;align-items:center;gap:10px;background:var(--brand-softer);border:1px solid var(--brand-subtle);color:var(--fg-brand-strong);border-radius:var(--radius);padding:12px 16px;font-size:14px}
+.dl-banner.late{background:var(--danger-soft);border-color:var(--danger-subtle);color:var(--fg-danger-strong)}
+.dl-banner svg.lucide{width:18px;height:18px}
+
+/* Sélection groupée (Back Office) */
+.tbl .ck{width:34px;padding-right:0}
+.tbl input[type=checkbox]{width:16px;height:16px;accent-color:var(--heading);cursor:pointer}
+.bulk{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:var(--sec);border:1px solid var(--default);border-radius:10px;padding:8px 12px;margin-bottom:12px;font-size:13px;font-weight:600;color:var(--heading)}
+.tbl tr.sel td{background:var(--brand-softer)}
+.tbl .clip{max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tbl tr.none td{color:var(--muted)}
+.nos{display:inline-flex;align-items:center;background:var(--warning-soft);color:var(--fg-warning);padding:1px 9px;border-radius:999px;font-size:12px;font-weight:600;white-space:nowrap}
+
+/* Assistant de saisie */
+.nat span svg.lucide{color:var(--catc,var(--brand))}
+.nat input:checked+span{border-color:var(--catc,var(--brand));background:color-mix(in srgb,var(--catc,var(--brand)) 7%,#fff);box-shadow:0 0 0 1px var(--catc,var(--brand))}
+.nat .n-art{margin-top:6px;font-size:11.5px;color:var(--body-subtle)}
+.qty{display:flex;align-items:stretch;border:1px solid var(--default);border-radius:var(--radius);overflow:hidden;width:max-content;background:var(--sec);box-shadow:var(--shadow-xs)}
+.qty button{width:42px;border:0;background:#fff;cursor:pointer;font-size:18px;font-weight:700;color:var(--body)}
+.qty button:hover{background:var(--sec);color:var(--heading)}
+.qty input{width:70px;height:40px;border:0;border-left:1px solid var(--default);border-right:1px solid var(--default);text-align:center;font-weight:700;outline:none;background:#fff;color:var(--heading)}
+.qty.err{border-color:#fda4af}
+.ops.err label>span{border-color:#fda4af}
+.quick{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.quick button{border:1px dashed var(--default);background:#fff;border-radius:999px;padding:4px 10px;font-size:12px;color:var(--body);cursor:pointer}
+.quick button:hover{border-color:var(--brand);color:var(--fg-brand-strong);background:var(--brand-softer)}
+.cart-l{border:1px solid var(--default);border-radius:var(--radius);overflow:hidden}
+.cart-i{display:flex;align-items:center;gap:12px;padding:10px 12px;border-bottom:1px solid var(--default-soft);animation:fadeUp .2s ease both}
+.cart-i:last-child{border-bottom:none}
+.cart-q{min-width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;flex-shrink:0}
+.cart-t{flex:1;min-width:0}
+.cart-t b{display:block;color:var(--heading);font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cart-t small{font-size:12px;color:var(--body-subtle)}
+.cart-x{border:none;background:none;width:30px;height:30px;border-radius:999px;color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center}
+.cart-x:hover{background:var(--danger-soft);color:var(--danger)}
+.cart-tot{display:flex;justify-content:space-between;padding:10px 12px;background:var(--sec);font-size:13px;color:var(--body)}
+.cart-tot b{color:var(--heading)}
+.add-more{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;margin-top:10px;padding:10px;border:1px dashed var(--brand-subtle);border-radius:var(--radius);background:var(--brand-softer);color:var(--fg-brand-strong);font-weight:600;cursor:pointer}
+.add-more:hover{border-color:var(--brand)}
+.ok-ref{display:inline-block;margin:10px 0 4px;background:var(--sec);border:1px dashed var(--default);border-radius:10px;padding:8px 16px;font-weight:800;letter-spacing:.06em;color:var(--heading);font-size:16px}
+.ok-box{text-align:center;padding:12px 0}
+.ok-ic{width:60px;height:60px;border-radius:999px;background:var(--success-soft);color:var(--success);display:flex;align-items:center;justify-content:center;margin:0 auto 12px}
+.ok-ic svg.lucide{width:30px;height:30px}
+
+/* Décision Back Office */
+.dec{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.dec label{cursor:pointer;position:relative}
+.dec input{position:absolute;opacity:0;pointer-events:none}
+.dec span{display:flex;align-items:center;justify-content:center;gap:6px;padding:9px;border:1px solid var(--default);border-radius:10px;font-size:13px;font-weight:600;color:var(--heading);background:#fff;transition:all .15s}
+.dec span:hover{background:var(--sec)}
+.dec .d-ok input:checked+span{border-color:var(--success);background:var(--success-soft);color:var(--fg-success-strong);box-shadow:0 0 0 1px var(--success)}
+.dec .d-ko input:checked+span{border-color:var(--danger);background:var(--danger-soft);color:var(--fg-danger-strong);box-shadow:0 0 0 1px var(--danger)}
+.dec .d-at input:checked+span{border-color:var(--warning);background:var(--warning-soft);color:var(--fg-warning);box-shadow:0 0 0 1px var(--warning)}
+.btn-danger{background:#fff;border-color:var(--danger-subtle);color:var(--danger)}
+.btn-danger:hover{background:var(--danger-soft)}
+
+@media (max-width:700px){.dec{grid-template-columns:1fr}}
+@media print{.bulk,.tbl .ck,.dl-banner{display:none!important}}
+.lg-conf+#lgStep1{margin-top:20px}
+.tbl td.ty{min-width:130px}
