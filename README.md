@@ -16,9 +16,9 @@ Il s'agit d'un site statique (HTML/CSS/JS, Chart.js, SheetJS, icônes Lucide) pu
 
 ### Connexion : poste → site → accès
 1. **Poste** : Caissière ordinaire, Caissière E-money (en agence) ou Opérateur, Assistant, Chef, Responsable, Manager (au siège).
-2. **Site** : les caissières choisissent leur site parmi les 32. Les postes du siège sont rattachés au **SIEGE**.
+2. **Site** : les caissières choisissent leur site parmi les 41 (ABATTA, ABOBO, ANGRE, BOUAKE, PONT FHB… COSMOS). Les postes du siège sont rattachés au **SIEGE**.
 3. **Accès** :
-   - **Caissières** : elles saisissent leur nom et prénom, l'accès est direct.
+   - **Caissières** : si des caissières sont déjà enregistrées pour ce site et ce poste, l'écran propose « Je suis… » avec leurs noms. Sinon, ou via « Je ne suis pas dans la liste », la caissière saisit son nom, qui sera proposé aux connexions suivantes (onglet `Agents`). L'accès est direct.
    - **Postes du siège** : la personne choisit son nom. Un **code à 4 chiffres** est envoyé à son adresse e-mail. Il est valable **5 minutes**, et 5 essais sont autorisés. Une fois le délai passé, le code expire et il faut en générer un nouveau. Sans le bon code, l'accès est refusé.
 
 La session reste ouverte sur l'appareil jusqu'à « Se déconnecter » (6 h maximum d'inactivité côté serveur).
@@ -39,7 +39,7 @@ Chacun arrive directement sur ce qu'il vient faire :
 
 | Écran | Pour qui | Contenu |
 |---|---|---|
-| **Exprimer un besoin** | Tous (écran d'accueil des agents) | Catalogue d'articles par catégorie (Informatique, Mobilier, Achats) avec recherche. Un clic ajoute l'article à **Ma demande**, à droite. Chaque ligne se complète sur place : quantité, type de besoin, équipement actuel si besoin, motif (avec motifs proposés en un clic), caractéristiques facultatives. Une ligne incomplète est signalée en orange. L'envoi n'est possible que lorsque tout est complet. La demande en cours est conservée sur l'appareil. |
+| **Exprimer un besoin** | Tous (écran d'accueil des agents) | Catalogue d'articles par catégorie (Informatique, Mobilier, Achats) avec recherche. Un clic coche l'article et l'ajoute à **Ma demande**, à droite. Un nouveau clic le décoche. Tant que l'article en cours n'est pas complété, les autres tuiles sont verrouillées. Chaque ligne se complète sur place : quantité, type de besoin, équipement actuel si besoin, motif (avec motifs proposés en un clic), caractéristiques facultatives. Une ligne incomplète est signalée en orange. L'envoi n'est possible que lorsque tout est complet. « Tout retirer », le retrait d'un article déjà renseigné et l'envoi passent par une fenêtre de confirmation, et l'envoi se termine par une fenêtre récapitulative avec la référence. La demande en cours est conservée sur l'appareil. |
 | **Mes besoins** / **Besoins du site** | Tous | Les demandes regroupées par référence, avec le statut de chaque ligne, la quantité validée, le nom du valideur et le motif en cas de rejet. Un besoin encore en attente peut être retiré. |
 | **À valider** | Zeinab Kone, Yaya Comara, Managers (écran d'accueil) | Les demandes regroupées par demandeur. Pour chaque ligne : motif, équipement actuel, quantité validée modifiable, boutons **Valider** et **Rejeter** (le motif du rejet est obligatoire). **Tout valider** traite une demande en un clic. L'onglet *Déjà traités* permet de revenir sur une décision. |
 | **Tableau de bord** | Valideurs | Indicateurs, graphiques, registre complet avec décision groupée, synthèse par site, articles consolidés. |
@@ -82,7 +82,7 @@ Le site est alors disponible à `https://<compte>.github.io/besoins-budget-qfs/`
 1. Avec le compte Google de l'entreprise, créez une feuille **Google Sheets** vide (par ex. « Besoins Budget 2027 »).
 2. Menu **Extensions → Apps Script**. Remplacez le contenu de `Code.gs` par celui de [`apps-script/Code.gs`](apps-script/Code.gs), puis enregistrez.
 3. Dans la liste des fonctions, choisissez **`setup`**, cliquez sur **Exécuter** et acceptez les autorisations.
-   Les onglets `Besoins`, `Personnes` et `Synthese` sont créés.
+   Les onglets `Besoins`, `Personnes`, `Agents` et `Synthese` sont créés.
 4. **Déployer → Nouveau déploiement**, type **Application Web** :
    - *Exécuter en tant que* : **Moi**
    - *Qui a accès* : **Tout le monde**

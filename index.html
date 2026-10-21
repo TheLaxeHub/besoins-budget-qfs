@@ -73,10 +73,15 @@
         <button type="button" class="lg-back" data-back="2"><i data-lucide="arrow-left"></i> Changer de site</button>
         <h2 class="lg-q">Qui êtes-vous ?</h2>
         <p class="lg-h" id="lgQuiH"></p>
+        <div id="lgConnus" hidden>
+          <div class="lg-grid lg-people" id="lgAgents"></div>
+          <button type="button" class="lg-renvoi" id="lgPasLa"><i data-lucide="user-plus"></i> Je ne suis pas dans la liste</button>
+        </div>
         <form id="lgNomForm" hidden>
           <label class="fl" for="lgNom">Votre nom et prénom</label>
           <input class="in" id="lgNom" autocomplete="name" placeholder="Ex. : Kouassi Aya">
           <button class="btn bp lg-go" type="submit"><i data-lucide="log-in"></i> Accéder à la plateforme</button>
+          <button type="button" class="lg-renvoi" id="lgListe" hidden><i data-lucide="users"></i> Choisir mon nom dans la liste</button>
         </form>
         <div class="lg-grid lg-people" id="lgPeople" hidden></div>
       </div>
@@ -153,12 +158,13 @@
               <div class="seg" id="nvCats" role="tablist"></div>
               <div class="sbx"><i data-lucide="search" class="si"></i><input type="search" id="nvSearch" placeholder="Rechercher un article…" autocomplete="off" aria-label="Rechercher un article"></div>
             </div>
+            <div class="lock" id="nvLock" hidden></div>
             <div class="tiles" id="nvTiles"></div>
           </div>
           <aside class="dem" id="nvDem">
             <div class="dem-h">
               <div><h2 class="dem-t"><i data-lucide="clipboard-list"></i>Ma demande</h2><p class="cs" id="demSub"></p></div>
-              <button type="button" class="lk" id="demVider" hidden>Tout retirer</button>
+              <button type="button" class="dem-vider" id="demVider" hidden><i data-lucide="trash-2"></i>Tout retirer</button>
             </div>
             <div class="dem-l" id="demLignes"></div>
             <div class="dem-f">
@@ -366,6 +372,20 @@
     <div id="pForm"></div>
   </div>
 </aside>
+
+<!-- ================= POPUP DE CONFIRMATION ================= -->
+<div class="cf" id="cf" hidden role="dialog" aria-modal="true" aria-labelledby="cfT">
+  <div class="cf-box">
+    <span class="cf-ic" id="cfIc"></span>
+    <h3 class="cf-t" id="cfT"></h3>
+    <p class="cf-p" id="cfP"></p>
+    <div class="cf-x" id="cfX"></div>
+    <div class="cf-b">
+      <button type="button" class="btn bo" id="cfNo">Annuler</button>
+      <button type="button" class="btn bp" id="cfOk">Confirmer</button>
+    </div>
+  </div>
+</div>
 
 <div class="ld" id="loader" hidden><div class="ld-s"></div></div>
 <div class="toast" id="toast" role="status"></div>

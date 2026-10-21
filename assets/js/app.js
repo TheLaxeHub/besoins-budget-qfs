@@ -15,6 +15,7 @@
   };
   const ORDRE_STATUTS = ['EN_ATTENTE', 'VALIDE', 'REJETE'];
   const CATS = C.CATEGORIES;
+  const TOUS_SITES = [C.SITE_SIEGE].concat(C.SITES); // synthèses et filtres (le siège en plus des sites)
   const AUTRE = '__autre__';
   const PAR_PAGE = 100;
   const CLE_SESSION = 'bud27_session';
@@ -92,6 +93,40 @@
   }
   function chargement(on) { $('#loader').hidden = !on; }
 
+  // Popup de confirmation : confirmer({ titre, texte, extra, ok, okIco, annuler, ico, ton: 'info'|'danger'|'success' }) → Promise<boolean>
+  let cfResolve = null;
+  function confirmer(o) {
+    return new Promise(function (res) {
+      if (cfResolve) cfResolve(false);
+      cfResolve = res;
+      const ton = o.ton || 'info';
+      $('#cf').className = 'cf cf-' + ton;
+      $('#cfIc').innerHTML = ico(o.ico || 'circle-help');
+      $('#cfT').textContent = o.titre || '';
+      $('#cfP').innerHTML = o.texte || '';
+      $('#cfX').innerHTML = o.extra || '';
+      $('#cfX').hidden = !o.extra;
+      $('#cfOk').className = 'btn ' + (ton === 'danger' ? 'bdg' : ton === 'success' ? 'bsc' : 'bp');
+      $('#cfOk').innerHTML = (o.okIco ? ico(o.okIco) : '') + esc(o.ok || 'Confirmer');
+      $('#cfNo').innerHTML = (o.annulerIco ? ico(o.annulerIco) : '') + esc(o.annuler || 'Annuler');
+      $('#cf').hidden = false;
+      document.body.classList.add('cf-on');
+      icones();
+      setTimeout(function () { $('#cfOk').focus(); }, 40);
+    });
+  }
+  function fermerConfirm(v) {
+    $('#cf').hidden = true;
+    document.body.classList.remove('cf-on');
+    if (cfResolve) { const r = cfResolve; cfResolve = null; r(v); }
+  }
+  function initConfirm() {
+    $('#cfOk').addEventListener('click', function () { fermerConfirm(true); });
+    $('#cfNo').addEventListener('click', function () { fermerConfirm(false); });
+    $('#cf').addEventListener('click', function (e) { if (e.target === $('#cf')) fermerConfirm(false); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !$('#cf').hidden) { e.stopImmediatePropagation(); fermerConfirm(false); } }, true);
+  }
+
   const memoire = {
     lire: function (k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } },
     ecrire: function (k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* mode privé */ } },
@@ -142,6 +177,12 @@
       b.addEventListener('click', function () { arreterMinuteur(); etapeConnexion(Number(b.dataset.back)); });
     });
     $('#lgNomForm').addEventListener('submit', function (e) { e.preventDefault(); connexionSite(); });
+    $('#lgAgents').addEventListener('click', function (e) {
+      const b = e.target.closest('[data-agent]');
+      if (b) connexionSite(b.dataset.agent);
+    });
+    $('#lgPasLa').addEventListener('click', function () { afficherNomLibre(true); });
+    $('#lgListe').addEventListener('click', function () { $('#lgConnus').hidden = false; $('#lgNomForm').hidden = true; $('#lgQuiH').textContent = L.poste.libelle + ' · ' + L.site + ' — qui êtes-vous parmi les personnes déjà enregistrées ?'; });
     $('#lgPeople').addEventListener('click', function (e) {
       const b = e.target.closest('[data-nom]');
       if (!b) return;
@@ -205,10 +246,11 @@
     if (n === 3) {
       const siege = L.poste.siege;
       $('#lgQuiH').textContent = L.poste.libelle + ' · ' + L.site + (siege ? ' — choisissez votre nom : un code de connexion vous sera envoyé par e-mail.' : '');
-      $('#lgNomForm').hidden = siege;
       $('#lgPeople').hidden = !siege;
+      $('#lgNomForm').hidden = true;
+      $('#lgConnus').hidden = true;
       if (siege) await dessinerPersonnes();
-      else setTimeout(function () { $('#lgNom').focus(); }, 50);
+      else await dessinerAgents();
     }
     icones();
   }
@@ -231,8 +273,35 @@
     }).join('') : '<div class="lg-none">Aucune personne enregistrée pour ce poste.</div>';
   }
 
-  async function connexionSite() {
-    const nom = $('#lgNom').value.trim();
+  async function dessinerAgents() {
+    let agents = [];
+    $('#lgAgents').innerHTML = '<div class="lg-none">Chargement…</div>';
+    $('#lgConnus').hidden = false;
+    try {
+      agents = (await Store.agentsSite({ poste: L.poste.libelle, site: L.site })).agents || [];
+    } catch (e) {
+      $('#lgErr').textContent = e.message;
+    }
+    L.agents = agents;
+    if (!agents.length) { afficherNomLibre(false); return; }
+    $('#lgQuiH').textContent = L.poste.libelle + ' · ' + L.site + ' — qui êtes-vous parmi les personnes déjà enregistrées ?';
+    $('#lgAgents').innerHTML = agents.map(function (n) {
+      return '<button type="button" class="lg-pdv" data-agent="' + esc(n) + '"><span class="lg-pin">' + esc(initiales(n)) + '</span><span>' + esc(n) + '<small>Je suis ' + esc(n.split(' ')[0]) + '</small></span></button>';
+    }).join('');
+    icones();
+  }
+
+  function afficherNomLibre(depuisListe) {
+    $('#lgConnus').hidden = true;
+    $('#lgNomForm').hidden = false;
+    $('#lgListe').hidden = !(L.agents && L.agents.length);
+    $('#lgQuiH').textContent = L.poste.libelle + ' · ' + L.site + (depuisListe ? ' — indiquez votre nom : il sera proposé à vos prochaines connexions.' : ' — première connexion sur ce site : indiquez votre nom.');
+    $('#lgNom').value = '';
+    setTimeout(function () { $('#lgNom').focus(); }, 50);
+  }
+
+  async function connexionSite(nomChoisi) {
+    const nom = (nomChoisi || $('#lgNom').value).trim();
     if (nom.length < 2) { $('#lgNom').classList.add('err'); $('#lgErr').textContent = 'Indiquez votre nom et prénom.'; return; }
     $('#lgNom').classList.remove('err');
     chargement(true);
@@ -332,7 +401,7 @@
     S.filtres = Object.assign({}, FILTRES_DEFAUT, { vue: estBO() ? 'a_valider' : 'tout' });
     S.panier = (memoire.lire(clePanier()) || []).filter(function (l) { return l && l.uid; });
     S.vue = null;
-    NV.envoye = null; NV.cat = CATS[0].code; NV.q = '';
+    NV.envoye = null; NV.cat = CATS[0].code; NV.q = ''; NV.sig = null;
     MES.statut = ''; MES.q = '';
     VAL.onglet = 'attente'; VAL.site = ''; VAL.cat = ''; VAL.q = '';
     $('#login').hidden = true;
@@ -388,7 +457,7 @@
     icones();
 
     $('#fSite').innerHTML = '<option value="">Tous les sites</option>' +
-      C.SITES.map(function (p) { return '<option>' + esc(p) + '</option>'; }).join('');
+      TOUS_SITES.map(function (p) { return '<option>' + esc(p) + '</option>'; }).join('');
     $('#fCat').innerHTML = '<option value="">Toutes</option>' +
       CATS.map(function (c) { return '<option value="' + esc(c.code) + '">' + esc(c.libelle) + '</option>'; }).join('');
     $('#fType').innerHTML = '<option value="">Tous</option>' +
@@ -723,7 +792,7 @@
 
     if (estBO()) {
       const ls = filtrer({ ignorerSite: true }).filter(function (b) { return b.statut !== 'REJETE'; });
-      const sites = C.SITES.map(function (p) { return { p: p, q: somme(ls.filter(function (b) { return b.site === p; }), qteRetenue) }; })
+      const sites = TOUS_SITES.map(function (p) { return { p: p, q: somme(ls.filter(function (b) { return b.site === p; }), qteRetenue) }; })
         .filter(function (x) { return x.q > 0; })
         .sort(function (a, b) { return b.q - a.q; })
         .map(function (x) { return x.p; });
@@ -808,7 +877,7 @@
   }
 
   function rendreSynthese(liste) {
-    const lignes = C.SITES.map(function (p) {
+    const lignes = TOUS_SITES.map(function (p) {
       const l = liste.filter(function (b) { return b.site === p; });
       const st = stats(l);
       const parC = {};
@@ -1002,6 +1071,12 @@
   }
 
   async function retirer(b) {
+    const ok = await confirmer({
+      ton: 'danger', ico: 'trash-2', titre: 'Retirer ce besoin ?',
+      texte: '« <b>' + esc(b.libelle) + '</b> » (× ' + nombre(b.quantite) + ', demande ' + esc(b.ref) + ') sera retiré et ne sera pas examiné.',
+      ok: 'Retirer le besoin', okIco: 'trash-2', annuler: 'Annuler',
+    });
+    if (!ok) return;
     chargement(true);
     try {
       await Store.cancel(S.session, { id: b.id });
@@ -1086,13 +1161,37 @@
     $('#nvSearch').addEventListener('input', function (e) { NV.q = e.target.value; rendreCatalogue(); });
     $('#nvTiles').addEventListener('click', function (e) {
       const t = e.target.closest('[data-art]');
-      if (t) ajouterArticle(t.dataset.cat, t.dataset.art === AUTRE ? '' : t.dataset.art, t.dataset.art === AUTRE);
+      if (!t) return;
+      const autre = t.dataset.art === AUTRE;
+      if (!autre) {
+        const ex = S.panier.find(function (l) { return l.categorie === t.dataset.cat && l.libelle === t.dataset.art; });
+        if (ex) { retirerLigne(ex); return; } // décocher
+      }
+      const bl = ligneBloquante();
+      if (bl) {
+        allerLigne(bl);
+        toast('Complétez d\'abord « ' + (bl.libelle || 'l\'article en cours') + ' » avant d\'en choisir un autre.', 'err');
+        return;
+      }
+      ajouterArticle(t.dataset.cat, autre ? '' : t.dataset.art, autre);
     });
-    $('#demVider').addEventListener('click', function () {
-      if (!window.confirm('Retirer toutes les lignes de votre demande ?')) return;
+    $('#nvLock').addEventListener('click', function (e) {
+      if (!e.target.closest('[data-act="aller"]')) return;
+      const bl = ligneBloquante();
+      if (bl) allerLigne(bl);
+    });
+    $('#demVider').addEventListener('click', async function () {
+      const n = S.panier.length;
+      const ok = await confirmer({
+        ton: 'danger', ico: 'trash-2', titre: 'Vider votre demande ?',
+        texte: 'Les <b>' + n + ' article' + (n > 1 ? 's' : '') + '</b> de votre demande seront retirés, avec les informations déjà saisies.',
+        extra: recapHtml(S.panier), ok: 'Oui, tout retirer', okIco: 'trash-2', annuler: 'Garder ma demande',
+      });
+      if (!ok) return;
       S.panier = [];
       sauverPanier();
       rendreNouveau();
+      toast('Votre demande a été vidée.');
     });
     $('#demEnvoyer').addEventListener('click', envoyerDemande);
     $('#nvBar').addEventListener('click', function () { $('#nvDem').scrollIntoView({ behavior: 'smooth', block: 'start' }); });
@@ -1108,7 +1207,7 @@
       if (act === 'nouvelle') { NV.envoye = null; rendreNouveau(); return; }
       if (act === 'voir-mes') { NV.envoye = null; rendreNouveau(); allerVue('mes'); return; }
       if (!l) return;
-      if (act === 'rm') { S.panier = S.panier.filter(function (x) { return x !== l; }); sauverPanier(); rendreNouveau(); return; }
+      if (act === 'rm') { retirerLigne(l); return; }
       if (act === 'moins' || act === 'plus') {
         l.quantite = Math.max(1, (parseInt(l.quantite, 10) || 1) + (act === 'plus' ? 1 : -1));
         ligne.querySelector('[data-f="quantite"]').value = l.quantite;
@@ -1153,12 +1252,17 @@
     majBarreMobile();
   }
 
-  function rendreCatalogue() {
+  function rendreCatalogue(forcer) {
     const dans = {};
     S.panier.forEach(function (l) {
       const k = l.categorie + '|' + l.libelle;
       dans[k] = (dans[k] || 0) + (Number(l.quantite) || 0);
     });
+    // Ne redessine que si quelque chose a changé (évite de perdre un clic pendant la saisie).
+    const blq = ligneBloquante();
+    const sig = JSON.stringify([NV.cat, NV.q, dans, blq ? [blq.uid, manques(blq)] : null, S.panier.map(function (l) { return l.categorie; })]);
+    if (!forcer && sig === NV.sig) return;
+    NV.sig = sig;
     $('#nvCats').innerHTML = CATS.map(function (c) {
       const n = S.panier.filter(function (l) { return l.categorie === c.code; }).length;
       return '<button type="button" role="tab" class="seg-b' + (!NV.q && NV.cat === c.code ? ' on' : '') + '" data-cat="' + c.code + '" style="--c:' + c.couleur + '">' +
@@ -1173,16 +1277,26 @@
         tuiles.push({ c: c, a: a });
       });
     });
+    const bl = ligneBloquante();
+    $('#nvLock').hidden = !bl;
+    if (bl) {
+      $('#nvLock').innerHTML = '<span class="lock-i">' + ico('lock') + '</span><span class="lock-t"><b>Complétez « ' + esc(bl.libelle || 'l\'article en cours') + ' » avant d\'en choisir un autre</b><small>Il manque : ' + esc(manques(bl).join(', ')) + '.</small></span>' +
+        '<button type="button" class="btn bp btn-sm" data-act="aller">' + ico('pencil') + 'Compléter</button>';
+    }
+    $('#nvTiles').classList.toggle('locked', !!bl);
     const tuile = function (t) {
       const n = dans[t.c.code + '|' + t.a] || 0;
-      return '<button type="button" class="tile' + (n ? ' in' : '') + '" data-cat="' + t.c.code + '" data-art="' + esc(t.a) + '" style="--c:' + t.c.couleur + '">' +
+      return '<button type="button" class="tile' + (n ? ' in' : bl ? ' off' : '') + '" data-cat="' + t.c.code + '" data-art="' + esc(t.a) + '" style="--c:' + t.c.couleur + '"' +
+        ' aria-pressed="' + (n ? 'true' : 'false') + '" title="' + (n ? 'Cliquer pour retirer cet article' : bl ? 'Complétez d\'abord l\'article en cours' : 'Ajouter à ma demande') + '">' +
+        '<span class="tile-ck">' + ico('check') + '</span>' +
         '<span class="tile-ic">' + ico(icoArticle(t.a, t.c.code)) + '</span>' +
         '<span class="tile-n">' + esc(t.a) + '</span>' +
         (q ? '<span class="tile-c">' + esc(t.c.libelle) + '</span>' : '') +
-        '<span class="tile-a">' + (n ? ico('check') + 'Ajouté · ' + nombre(n) : ico('plus') + 'Ajouter') + '</span></button>';
+        (n ? '<span class="tile-a"><span class="a-on">' + ico('check') + 'Ajouté · ' + nombre(n) + '</span><span class="a-off">' + ico('x') + 'Retirer</span></span>'
+          : '<span class="tile-a">' + ico(bl ? 'lock' : 'plus') + (bl ? 'Verrouillé' : 'Ajouter') + '</span>') + '</button>';
     };
     const autres = (q ? [] : [cat(NV.cat)]).map(function (c) {
-      return '<button type="button" class="tile tile-o" data-cat="' + c.code + '" data-art="' + AUTRE + '" style="--c:' + c.couleur + '">' +
+      return '<button type="button" class="tile tile-o' + (bl ? ' off' : '') + '" data-cat="' + c.code + '" data-art="' + AUTRE + '" style="--c:' + c.couleur + '">' +
         '<span class="tile-ic">' + ico('pencil-line') + '</span><span class="tile-n">Autre article</span>' +
         '<span class="tile-a">' + ico('plus') + 'Préciser</span></button>';
     });
@@ -1192,20 +1306,44 @@
     icones();
   }
 
-  function ajouterArticle(catCode, libelle, autre) {
-    if (NV.envoye) NV.envoye = null;
-    if (!autre) {
-      const ex = S.panier.find(function (l) { return l.categorie === catCode && l.libelle === libelle; });
-      if (ex) {
-        ex.open = true;
-        sauverPanier();
-        rendreDemande();
-        const el = $('[data-uid="' + ex.uid + '"]');
-        if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); el.classList.add('flash'); }
-        toast(libelle + ' est déjà dans votre demande : ajustez la quantité.');
-        return;
-      }
+  const ligneBloquante = function () { return S.panier.find(function (l) { return manques(l).length; }); };
+
+  function allerLigne(l) {
+    l.open = true;
+    rendreDemande();
+    const el = $('[data-uid="' + l.uid + '"]');
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash');
+  }
+
+  function recapHtml(lignes) {
+    return '<div class="cf-l">' + lignes.map(function (l) {
+      const c = cat(l.categorie);
+      return '<div class="cf-li" style="--c:' + c.couleur + '"><span class="dl-ic">' + ico(icoArticle(l.libelle, l.categorie)) + '</span>' +
+        '<span class="cf-ln"><b>' + esc(l.libelle || 'Article à préciser') + '</b><small>' + esc(c.libelle) + (l.type_besoin ? ' · ' + esc(l.type_besoin) : '') + '</small></span>' +
+        '<span class="cf-lq">× ' + nombre(l.quantite) + '</span></div>';
+    }).join('') + '</div>';
+  }
+
+  async function retirerLigne(l) {
+    const rempli = l.type_besoin || String(l.motif || '').trim() || l.annee_acquisition || String(l.caracteristiques || '').trim();
+    if (rempli) {
+      const ok = await confirmer({
+        ton: 'danger', ico: 'circle-minus', titre: 'Retirer cet article ?',
+        texte: '« <b>' + esc(l.libelle || 'Article à préciser') + '</b> » sera retiré de votre demande, avec les informations saisies.',
+        ok: 'Retirer', okIco: 'trash-2', annuler: 'Garder',
+      });
+      if (!ok) return;
     }
+    S.panier = S.panier.filter(function (x) { return x !== l; });
+    sauverPanier();
+    rendreNouveau();
+    toast('« ' + (l.libelle || 'Article') + ' » retiré de votre demande.');
+  }
+
+  function ajouterArticle(catCode, libelle, autre) {
+    NV.envoye = null;
     S.panier.forEach(function (l) { if (!manques(l).length) l.open = false; });
     const l = {
       uid: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), categorie: catCode, libelle: libelle, autre: !!autre,
@@ -1320,6 +1458,7 @@
     $('#demMsg').textContent = !n ? '' : incompletes ? incompletes + ' ligne(s) à compléter avant l\'envoi.' : 'Tout est prêt : vous pouvez envoyer.';
     majCompteurPanier();
     majBarreMobile();
+    rendreCatalogue();
   }
 
   function majBarreMobile() {
@@ -1339,6 +1478,14 @@
       return;
     }
     if (!S.panier.length) return;
+    const v = valideurTxt({ poste: S.session.poste, demandeur: S.session.nom, demandeur_id: S.session.id });
+    const n = S.panier.length;
+    const ok = await confirmer({
+      ton: 'info', ico: 'send', titre: 'Envoyer votre demande ?',
+      texte: '<b>' + n + ' besoin' + (n > 1 ? 's' : '') + '</b> (' + nombre(somme(S.panier, function (l) { return l.quantite; })) + ' unité(s)) seront transmis à <b>' + esc(v) + '</b> pour validation.',
+      extra: recapHtml(S.panier), ok: 'Envoyer ma demande', okIco: 'send', annuler: 'Revoir',
+    });
+    if (!ok) return;
     const btn = $('#demEnvoyer');
     btn.disabled = true;
     chargement(true);
@@ -1351,12 +1498,19 @@
         };
       });
       const r = await Store.create(S.session, { items: items });
-      NV.envoye = { ref: r.ref, n: items.length };
       S.panier = [];
       sauverPanier();
       rendreNouveau();
-      $('#nvDem').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      chargement(false);
       actualiser(true);
+      const suivre = await confirmer({
+        ton: 'success', ico: 'check', titre: 'Demande envoyée !',
+        texte: items.length + ' besoin' + (items.length > 1 ? 's' : '') + ' transmis à <b>' + esc(v) + '</b>. Vous serez informé de la décision dans « ' + esc($('#sbMes').textContent) + ' ».',
+        extra: '<div class="cf-ref"><small>Référence de la demande</small><b>' + esc(r.ref) + '</b></div>',
+        ok: 'Suivre mes besoins', okIco: 'list-checks', annuler: 'Nouvelle demande', annulerIco: 'plus',
+      });
+      if (suivre) allerVue('mes');
+      else window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (e) {
       toast(e.message, 'err');
       btn.disabled = false;
@@ -1458,7 +1612,7 @@
   const VAL = { onglet: 'attente', site: '', cat: '', q: '' };
 
   function initValider() {
-    $('#valSite').innerHTML = '<option value="">Tous les sites</option>' + C.SITES.map(function (p) { return '<option>' + esc(p) + '</option>'; }).join('');
+    $('#valSite').innerHTML = '<option value="">Tous les sites</option>' + TOUS_SITES.map(function (p) { return '<option>' + esc(p) + '</option>'; }).join('');
     $('#valCat').innerHTML = '<option value="">Toutes catégories</option>' + CATS.map(function (c) { return '<option value="' + c.code + '">' + esc(c.libelle) + '</option>'; }).join('');
     $('#valTabs').addEventListener('click', function (e) {
       const b = e.target.closest('[data-o]');
@@ -1615,7 +1769,7 @@
     }), [14, 34, 8, 8, 13, 12, 14]), 'Articles consolidés');
 
     if (estBO()) {
-      XLSX.utils.book_append_sheet(wb, feuille(C.SITES.map(function (p) {
+      XLSX.utils.book_append_sheet(wb, feuille(TOUS_SITES.map(function (p) {
         const l = lignes.filter(function (b) { return b.site === p; });
         const st = stats(l);
         const row = { 'Site': p, 'Lignes': st.n };
@@ -1630,6 +1784,7 @@
 
   /* ================= Démarrage ================= */
 
+  initConfirm();
   initConnexion();
   const sess = memoire.lire(CLE_SESSION);
   if (sess && sess.token && sess.poste) {

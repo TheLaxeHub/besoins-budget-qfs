@@ -147,7 +147,17 @@
       if (C.SITES.indexOf(d.site) < 0) throw erreur('VALIDATION', 'Site inconnu.');
       const nom = texte(d.nom, 80);
       if (nom.length < 2) throw erreur('VALIDATION', 'Indiquez votre nom et prénom.');
-      return ouvrirDemo({ poste: d.poste, site: d.site, nom: nom, id: '' });
+      const db = lireDemo();
+      db.agents = db.agents || [];
+      const ex = db.agents.find(function (a) { return a.site === d.site && a.poste === d.poste && a.nom.toLowerCase() === nom.toLowerCase(); });
+      if (!ex) { db.agents.push({ site: d.site, poste: d.poste, nom: nom }); ecrireDemo(db); }
+      return ouvrirDemo({ poste: d.poste, site: d.site, nom: ex ? ex.nom : nom, id: '' });
+    },
+    agentsSite: function (p) {
+      const d = p.data || {};
+      const agents = (lireDemo().agents || []).filter(function (a) { return a.site === d.site && a.poste === d.poste; })
+        .map(function (a) { return a.nom; }).sort(function (a, b) { return a.localeCompare(b, 'fr'); });
+      return { ok: true, agents: agents };
     },
     deconnexion: function (p) {
       const db = lireDemo();
@@ -245,6 +255,7 @@
     envoyerCode: function (d) { return req('envoyerCode', null, d); },
     verifierCode: function (d) { return req('verifierCode', null, d); },
     connexionSite: function (d) { return req('connexionSite', null, d); },
+    agentsSite: function (d) { return req('agentsSite', null, d); },
     deconnexion: function (s) { return req('deconnexion', s.token); },
     list: function (s) { return req('list', s.token); },
     create: function (s, data) { return req('create', s.token, data); },

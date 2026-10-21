@@ -12,6 +12,7 @@
  * Onglets :
  *   - Besoins   : une ligne par besoin exprimé (une demande = plusieurs lignes, même réf.).
  *   - Personnes : agents du siège (nom, poste, e-mail) — reçoivent un code à 4 chiffres pour se connecter.
+ *   - Agents    : caissières déjà connectées (site, poste, nom) — proposées à la connexion (« Je suis… »).
  *   - Synthese  : tableaux récapitulatifs (formules, mis à jour automatiquement).
  *
  * Connexion :
@@ -22,11 +23,11 @@
 
 const SITE_SIEGE = 'SIEGE';
 const SITES = [
-  'SIEGE', 'ABOBO', 'ABOISSO', 'AGBOVILLE', 'ANGRE', 'BONDOUKOU', 'BONGOUANOU', 'BOUAKE',
-  'BOUNA', 'BOUNDIALI', 'COSMOS', 'DAOUKRO', 'DIMBOKRO', 'DIVO', 'FERKE', 'GUIGLO', 'KONG',
-  'MANKONO', 'ODIENNE', 'PHB', 'SASSANDRA', 'SEGUELA', 'TOUBA', 'VGE', 'YOPOUGON',
-  'FOURRIERE ABOBO', 'FOURRIERE BASSAM', 'BARRAGE GSR1', 'BARRAGE GSR2', 'BARRAGE GSR3',
-  'BARRAGE PSSR1', 'BARRAGE PSSR2',
+  'ABATTA', 'ABOBO', 'ANGRE', 'BOUAKE', 'PONT FHB', 'VGE', 'YAOU', 'YOPOUGON', 'DABOU', 'DALOA',
+  'DIVO', 'GAGNOA', 'KORHOGO', 'MAN', 'SAN-PEDRO', 'SOUBRE', 'YAKRO', 'ABENGOUROU', 'ABOISSO',
+  'GUIGLO', 'BONDOUKOU', 'BOUAFLE', 'ADZOPE', 'DAOUKRO', 'FERKE', 'SEGUELA', 'ODIENNE',
+  'BOUNDIALI', 'KATIOLA', 'KONG', 'AGBOVILLE', 'SASSANDRA', 'DUEKOUE', 'TOUMODI', 'MINIGNAN',
+  'MANKONO', 'BONGOUANOU', 'DIMBOKRO', 'TOUBA', 'BOUNA', 'COSMOS',
 ];
 
 const POSTES_SITE = ['Caissière ordinaire', 'Caissière E-money'];
@@ -123,6 +124,7 @@ function route_(req) {
     case 'envoyerCode': return Object.assign({ ok: true }, envoyerCode_(d));
     case 'verifierCode': return Object.assign({ ok: true }, verifierCode_(d));
     case 'connexionSite': return Object.assign({ ok: true }, connexionSite_(d));
+    case 'agentsSite': return { ok: true, agents: agentsSite_(d) };
   }
   const sess = session_(req.token);
   switch (req.action) {
@@ -221,7 +223,25 @@ function connexionSite_(d) {
   if (POSTES_SITE.indexOf(poste) < 0) throw erreur_('INTERDIT', 'Ce poste se connecte avec un code envoyé par e-mail.');
   if (SITES.indexOf(site) < 0) throw erreur_('VALIDATION', 'Site inconnu.');
   if (nom.length < 2) throw erreur_('VALIDATION', 'Indiquez votre nom et prénom.');
-  return ouvrirSession_({ poste: poste, site: site, nom: nom, id: '' });
+  const existant = agentsSite_({ poste: poste, site: site }).find(function (n) { return n.toLowerCase() === nom.toLowerCase(); });
+  if (!existant) {
+    verrou_(function () { base_().agents.appendRow([site, poste, "'" + nom.replace(/^[=+\-@]+/, ''), new Date().toISOString()]); });
+  }
+  return ouvrirSession_({ poste: poste, site: site, nom: existant || nom, id: '' });
+}
+
+/** Caissières déjà enregistrées pour ce site et ce poste (pour l'écran « Je suis… »). */
+function agentsSite_(d) {
+  const poste = String(d.poste || '');
+  const site = String(d.site || '').trim().toUpperCase();
+  const sh = base_().agents;
+  if (sh.getLastRow() < 2) return [];
+  const vus = {};
+  return sh.getRange(2, 1, sh.getLastRow() - 1, 3).getValues()
+    .filter(function (r) { return String(r[0]) === site && String(r[1]) === poste && String(r[2]).trim(); })
+    .map(function (r) { return String(r[2]).trim(); })
+    .filter(function (n) { const k = n.toLowerCase(); if (vus[k]) return false; vus[k] = 1; return true; })
+    .sort(function (a, b) { return a.localeCompare(b, 'fr'); });
 }
 
 function ouvrirSession_(s) {
@@ -400,7 +420,8 @@ function base_() {
     personnes.getRange(2, 1, PERSONNES_INIT.length, 3).setValues(PERSONNES_INIT);
     personnes.setColumnWidths(1, 3, 220);
   }
-  return { besoins: besoins, personnes: personnes };
+  const agents = onglet_(ss, 'Agents', ['site', 'poste', 'nom', 'cree_le']);
+  return { besoins: besoins, personnes: personnes, agents: agents };
 }
 
 function onglet_(ss, nom, cols) {

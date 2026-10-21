@@ -324,3 +324,71 @@
   .seg-b{flex:1;justify-content:center;white-space:nowrap;padding:8px 10px}
   .main{padding-bottom:84px}
 }
+
+/* ---------- Popup de confirmation ---------- */
+.cf{position:fixed;inset:0;z-index:1500;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(15,23,42,.5);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);animation:cfFade .18s ease both}
+.cf-box{width:100%;max-width:440px;background:#fff;border-radius:20px;box-shadow:0 24px 64px rgba(15,23,42,.28);padding:28px 26px 22px;text-align:center;animation:cfPop .22s cubic-bezier(.2,.9,.3,1.2) both}
+.cf-ic{width:60px;height:60px;border-radius:999px;margin:0 auto 14px;display:flex;align-items:center;justify-content:center;background:var(--brand-softer);color:var(--brand);box-shadow:0 0 0 8px color-mix(in srgb,var(--brand) 6%,transparent)}
+.cf-ic svg.lucide{width:28px;height:28px}
+.cf-danger .cf-ic{background:var(--danger-soft);color:var(--danger);box-shadow:0 0 0 8px color-mix(in srgb,var(--danger) 6%,transparent)}
+.cf-success .cf-ic{background:var(--success-soft);color:var(--success);box-shadow:0 0 0 8px color-mix(in srgb,var(--success) 7%,transparent);animation:cfPop .4s .05s cubic-bezier(.2,.9,.3,1.4) both}
+.cf-t{font-size:19px;font-weight:700;letter-spacing:-.01em;margin-bottom:6px}
+.cf-p{font-size:14px;line-height:1.55;color:var(--body)}
+.cf-p b{color:var(--heading)}
+.cf-x{margin-top:14px;text-align:left}
+.cf-l{max-height:220px;overflow-y:auto;border:1px solid var(--default);border-radius:12px;background:var(--sec)}
+.cf-li{display:flex;align-items:center;gap:10px;padding:8px 10px;border-bottom:1px solid var(--default-soft)}
+.cf-li:last-child{border-bottom:none}
+.cf-li .dl-ic{width:30px;height:30px;border-radius:9px}
+.cf-li .dl-ic svg.lucide{width:15px;height:15px}
+.cf-ln{flex:1;min-width:0;display:flex;flex-direction:column;line-height:1.3}
+.cf-ln b{font-size:13px;color:var(--heading);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cf-ln small{font-size:11.5px;color:var(--body-subtle)}
+.cf-lq{font-weight:700;font-size:13px;color:var(--heading);font-variant-numeric:tabular-nums}
+.cf-ref{display:flex;flex-direction:column;align-items:center;gap:2px;padding:12px;border:1px dashed var(--default);border-radius:12px;background:var(--sec)}
+.cf-ref small{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--body-subtle);font-weight:600}
+.cf-ref b{font-size:20px;letter-spacing:.08em;color:var(--heading)}
+.cf-b{display:flex;gap:10px;margin-top:20px}
+.cf-b .btn{flex:1;padding:11px 14px;border-radius:12px;font-weight:600}
+.bdg{background:var(--danger);color:#fff}.bdg:hover{background:var(--fg-danger-strong)}
+.bsc{background:var(--success);color:#fff}.bsc:hover{background:var(--fg-success-strong)}
+body.cf-on{overflow:hidden}
+@keyframes cfFade{from{opacity:0}to{opacity:1}}
+@keyframes cfPop{from{opacity:0;transform:translateY(8px) scale(.96)}to{opacity:1;transform:none}}
+@media (max-width:480px){.cf{align-items:flex-end;padding:0}.cf-box{border-radius:20px 20px 0 0;padding:24px 18px 18px;max-width:none}.cf-b{flex-direction:column-reverse}}
+
+/* ---------- Bouton « Tout retirer » ---------- */
+.dem-vider{display:inline-flex;align-items:center;gap:6px;padding:6px 11px;border-radius:999px;border:1px solid var(--default);background:#fff;color:var(--body);font-size:12.5px;font-weight:600;cursor:pointer;transition:all .15s;white-space:nowrap}
+.dem-vider svg.lucide{width:14px;height:14px}
+.dem-vider:hover{border-color:var(--danger-subtle);background:var(--danger-soft);color:var(--danger)}
+
+/* ---------- Verrou : compléter l'article en cours ---------- */
+.lock{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:14px;background:var(--warning-soft);border:1px solid var(--warning-subtle);animation:fadeUp .2s ease both}
+.lock-i{width:34px;height:34px;border-radius:10px;background:#fff;color:var(--warning);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.lock-i svg.lucide{width:17px;height:17px}
+.lock-t{flex:1;min-width:0;display:flex;flex-direction:column}
+.lock-t b{font-size:13.5px;color:var(--fg-warning)}
+.lock-t small{font-size:12px;color:var(--fg-warning);opacity:.85}
+.lock .btn{flex-shrink:0}
+
+/* ---------- Tuiles cochables ---------- */
+.tile-ck{position:absolute;top:10px;right:10px;width:22px;height:22px;border-radius:999px;border:1.5px solid var(--default);background:#fff;display:flex;align-items:center;justify-content:center;color:transparent;transition:all .15s}
+.tile-ck svg.lucide{width:13px;height:13px;stroke-width:3}
+.tile:hover .tile-ck{border-color:var(--c)}
+.tile.in .tile-ck{background:var(--c);border-color:var(--c);color:#fff}
+.tile-o .tile-ck{display:none}
+.tile .a-off{display:none}
+.tile.in:hover{border-color:var(--danger);box-shadow:0 0 0 1px var(--danger);background:var(--danger-soft)}
+.tile.in:hover .a-on{display:none}
+.tile.in:hover .a-off{display:inline-flex;align-items:center;gap:4px;color:var(--danger)}
+.tile.in:hover .tile-ck{background:var(--danger);border-color:var(--danger)}
+.tile .a-on{display:inline-flex;align-items:center;gap:4px}
+.tile.off{opacity:.45;filter:grayscale(.6);cursor:not-allowed}
+.tile.off:hover{transform:none;box-shadow:none;border-color:var(--default)}
+.tile.off .tile-a{color:var(--muted)}
+@media (hover:none){.tile.in:hover{border-color:var(--c);box-shadow:0 0 0 1px var(--c);background:color-mix(in srgb,var(--c) 5%,#fff)}.tile.in:hover .a-on{display:inline-flex}.tile.in:hover .a-off{display:none}.tile.in:hover .tile-ck{background:var(--c);border-color:var(--c)}}
+@media (max-width:700px){.lock{flex-wrap:wrap}.lock .btn{width:100%}}
+
+/* ---------- « Je suis… » (caissières) ---------- */
+#lgAgents{max-height:none;overflow:visible}
+#lgAgents .lg-pin{font-size:11px}
