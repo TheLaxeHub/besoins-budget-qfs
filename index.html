@@ -29,9 +29,9 @@
     </div>
 
     <div class="lg-card">
-      <div class="lg-conf" id="lgDemo" hidden>
-        <b>Mode démonstration</b>
-        L'application n'est pas encore reliée au Google Sheet : les saisies restent dans ce navigateur et le code de connexion s'affiche à l'écran au lieu d'être envoyé par e-mail.
+      <div class="lg-conf" id="lgConf" hidden>
+        <b>Application pas encore reliée à sa base de données.</b>
+        Déployez le script Google Apps Script puis renseignez son URL dans <code>assets/js/config.js</code> (<code>API_URL</code>) — voir le README, section « Mise en service ».
       </div>
 
       <ol class="lg-stp" id="lgSteps">
@@ -98,7 +98,6 @@
           <input inputmode="numeric" maxlength="1" aria-label="Chiffre 4">
         </div>
         <div class="otp-t" id="otpTimer"></div>
-        <div class="otp-demo" id="otpDemo" hidden></div>
         <button class="btn bp lg-go" type="submit" id="otpGo"><i data-lucide="log-in"></i> Valider et accéder</button>
         <button type="button" class="lg-renvoi" id="otpRenvoi"><i data-lucide="refresh-cw"></i> Générer un nouveau code</button>
       </form>
@@ -135,7 +134,6 @@
       <span class="top-sep"></span>
       <nav class="bc" aria-label="Fil d'Ariane"><span data-cfg="CAMPAGNE"></span><i data-lucide="chevron-right"></i><b id="bcVue"></b></nav>
       <div class="top-r">
-        <span class="demo-pill" id="tbDemo" hidden>Mode démo</span>
         <span class="tfi" id="tbSync"></span>
         <button type="button" class="ibtn" id="btnRefresh" title="Actualiser les données"><i data-lucide="refresh-cw"></i></button>
       </div>

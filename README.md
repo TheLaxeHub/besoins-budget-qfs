@@ -64,11 +64,9 @@ Pour un *Remplacement d'équipement défectueux* ou un *Renouvellement*, l'**ann
 
 ---
 
-## Essayer tout de suite (mode démonstration)
+## Avant la mise en service
 
-Tant que `API_URL` est vide dans `assets/js/config.js`, l'application fonctionne en **mode démonstration** : tout marche, mais les données restent dans le navigateur. Ouvrez `index.html` ou servez le dossier (`npx serve .`) pour tester tous les postes. En démo, le code de connexion s'affiche à l'écran au lieu d'être envoyé par e-mail.
-
----
+L'application ne contient aucune donnée : tout est enregistré dans la feuille Google Sheets. Tant que `API_URL` est vide dans `assets/js/config.js`, l'écran de connexion affiche « Application pas encore reliée à sa base de données » et personne ne peut se connecter.
 
 ## Mise en service
 
@@ -92,7 +90,7 @@ Le site est alors disponible à `https://<compte>.github.io/besoins-budget-qfs/`
    ```js
    API_URL: 'https://script.google.com/macros/s/XXXXXXXX/exec',
    ```
-   Publiez ensuite la modification (commit + push). Le bandeau « Mode démonstration » disparaît.
+   Publiez ensuite la modification (commit + push). L'écran « Qui êtes-vous ? » apparaît alors à la connexion.
 
 > Après toute modification de `Code.gs` : **Déployer → Gérer les déploiements → ✏️ → Version : Nouvelle version → Déployer**. L'URL ne change pas.
 
@@ -130,7 +128,7 @@ assets/css/style.css     Charte iris (identique au suivi des incidents)
 assets/css/besoins.css   Compléments propres aux besoins
 assets/img/logo-qfs.png  Logo QFS
 assets/js/config.js      Configuration (URL de l'API, sites, catégories, articles…)
-assets/js/store.js       Accès aux données (API Apps Script ou mode démonstration)
+assets/js/store.js       Accès aux données (API Google Apps Script)
 assets/js/app.js         Interface : connexion, statistiques, registre, saisie, validation
 apps-script/Code.gs      Backend Google Apps Script (à coller dans la feuille Google Sheets)
 ```

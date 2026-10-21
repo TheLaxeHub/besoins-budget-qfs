@@ -143,7 +143,7 @@
   function initConnexion() {
     $$('[data-cfg]').forEach(function (el) { el.textContent = C[el.dataset.cfg] || ''; });
     document.title = C.APP_TITRE + ' — QFS';
-    $('#lgDemo').hidden = !Store.demo;
+    $('#lgConf').hidden = Store.configure;
     const carte = function (p) {
       return '<button type="button" class="lg-role" data-poste="' + esc(p.libelle) + '">' + ico(p.ico || 'user') +
         '<b>' + esc(p.libelle) + '</b><small>' + esc(p.aide || '') + '</small></button>';
@@ -225,7 +225,8 @@
   async function etapeConnexion(n) {
     L.etape = n;
     $('#lgErr').textContent = '';
-    $('#lgPoste').hidden = n !== 1;
+    $('#lgPoste').hidden = n !== 1 || !Store.configure;
+    $('#lgSteps').hidden = !Store.configure;
     $('#lgSite').hidden = n !== 2;
     $('#lgQui').hidden = n !== 3;
     $('#lgOtp').hidden = n !== 4;
@@ -323,8 +324,6 @@
       if (L.etape !== 4) etapeConnexion(4);
       $('#lgOtpWho').textContent = L.nom;
       $('#lgOtpH').innerHTML = 'Un code à 4 chiffres vient d\'être envoyé à <b>' + esc(r.email) + '</b>. Saisissez-le ci-dessous.';
-      $('#otpDemo').hidden = !r.demoCode;
-      if (r.demoCode) $('#otpDemo').innerHTML = 'Mode démonstration — votre code est <b>' + esc(r.demoCode) + '</b>';
       $$('#otpBox input').forEach(function (c) { c.value = ''; c.disabled = false; });
       $('#otpBox').classList.remove('err');
       $('#otpGo').disabled = false;
@@ -350,7 +349,6 @@
         t.textContent = 'Code expiré. Générez un nouveau code pour continuer.';
         $$('#otpBox input').forEach(function (c) { c.value = ''; c.disabled = true; });
         $('#otpGo').disabled = true;
-        $('#otpDemo').hidden = true;
         return;
       }
       t.className = 'otp-t';
@@ -409,7 +407,7 @@
     initApp();
     actualiser();
     clearInterval(S.minuteur);
-    if (!Store.demo && C.ACTUALISATION_SECONDES > 0) {
+    if (C.ACTUALISATION_SECONDES > 0) {
       S.minuteur = setInterval(function () {
         const actif = document.activeElement;
         const enSaisie = actif && /INPUT|TEXTAREA|SELECT/.test(actif.tagName) && actif.closest('.main');
@@ -451,7 +449,6 @@
       : caisse ? 'Besoins des caissières — ' + ss.site : 'Mes besoins';
     $('#fVue').value = S.filtres.vue;
     $('#ftText').textContent = 'Quipux Financial Services — ' + C.APP_TITRE + ' · ' + new Date().getFullYear();
-    $('#tbDemo').hidden = !Store.demo;
     rendreDateLimite();
     majCompteurPanier();
     icones();
@@ -1787,7 +1784,7 @@
   initConfirm();
   initConnexion();
   const sess = memoire.lire(CLE_SESSION);
-  if (sess && sess.token && sess.poste) {
+  if (Store.configure && sess && sess.token && sess.poste) {
     demarrerSession(sess); // un jeton expiré renvoie à l'écran de connexion
   } else {
     afficherConnexion();
