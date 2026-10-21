@@ -31,7 +31,11 @@
         body: JSON.stringify(payload),
       });
     } catch (e) {
-      throw erreur('RESEAU', 'Impossible de joindre le serveur. Vérifiez votre connexion internet.');
+      // Échec sans réponse lisible : coupure réseau OU script Apps Script non accessible publiquement
+      // (Google renvoie alors une page de connexion que le navigateur refuse de lire).
+      throw erreur('RESEAU', navigator.onLine === false
+        ? 'Pas de connexion internet.'
+        : "Le serveur ne répond pas. Vérifiez que le script Apps Script est déployé avec « Exécuter en tant que : Moi » et « Qui a accès : Tout le monde », et que l'URL dans config.js est bien celle qui se termine par /exec.");
     }
     if (!res.ok) throw erreur('RESEAU', 'Le serveur a répondu ' + res.status + '.');
     let data;
