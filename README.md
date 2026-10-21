@@ -49,6 +49,7 @@ Pour un *Remplacement d'équipement défectueux* ou un *Renouvellement*, l'**ann
 ### Export Excel (valideurs)
 - **Responsable** : les besoins qu'**il a validés**.
 - **Manager** : les besoins validés par **les responsables et les managers** (dont lui-même).
+- **Rita Kessie** (exportatrice, sans validation) : comme les managers, tous les besoins validés par Zeinab Kone, Yaya Comara et les managers — bouton « Exporter les besoins validés » dans *Mes besoins*. Réglage : `EXPORTEURS` (`config.js` et `Code.gs`).
 - L'export est toujours complet (sans tenir compte des filtres de l'écran). Il contient trois onglets : Besoins validés, Articles consolidés, Synthèse par site.
 
 ### Pour tous

@@ -40,6 +40,8 @@ const VALIDEURS = {
   'Yaya Comara': { postes: ['Caissière ordinaire'], personnes: ['Kader Soro', 'Isaac Kone', 'Kady Bakayoko', 'Yasmine Kamagate'] },
 };
 const POSTES_MANAGER = ['Responsable', 'Manager'];
+// Personnes du siège qui exportent tous les besoins validés sans les valider (à garder identique à config.js).
+const EXPORTEURS = ['Rita Kessie'];
 
 // Types pour lesquels l'année d'acquisition et l'état de l'équipement actuel sont obligatoires.
 const TYPES_EQUIPEMENT_ACTUEL = ['Remplacement Équipement Défectueux', 'Renouvellement'];
@@ -289,6 +291,7 @@ function peutDecider_(s, b) {
 function peutVoir_(s, b) {
   if (s.poste === 'Manager') return true;
   if (estMien_(s, b)) return true;
+  if (s.id && EXPORTEURS.indexOf(s.nom) >= 0 && b.statut === 'VALIDE') return true; // export des besoins validés
   if (s.poste === 'Responsable') return peutDecider_(s, b);
   if (POSTES_SITE.indexOf(s.poste) >= 0) return b.site === s.site && POSTES_SITE.indexOf(b.poste) >= 0;
   return false;

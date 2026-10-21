@@ -444,6 +444,7 @@
     $('#sbName').textContent = ss.nom;
     $('#sbRole').textContent = ss.poste + ' · ' + ss.site;
     $('#sbMes').textContent = caisse ? 'Besoins du site' : 'Mes besoins';
+    $('#mesExport').hidden = !Store.estExporteur(ss);
     $('#regTitle').textContent = bo
       ? (estManager() ? 'Besoins — validation des responsables et des managers' : 'Besoins — validation ' + ss.nom)
       : caisse ? 'Besoins des caissières — ' + ss.site : 'Mes besoins';
@@ -1726,14 +1727,15 @@
 
   function exporterExcel() {
     if (!window.XLSX) { toast("La bibliothèque Excel n'a pas pu être chargée (connexion internet ?).", 'err'); return; }
-    if (!estBO()) return;
-    // Responsable : les besoins qu'il a lui-même validés.
-    // Manager : les besoins validés par les responsables et par les managers (dont lui-même).
+    const exporteur = Store.estExporteur(S.session);
+    if (!estBO() && !exporteur) return;
+    // Responsable valideur : les besoins qu'il a lui-même validés.
+    // Manager et exportateurs (ex. Rita Kessie) : les besoins validés par les responsables et par les managers.
     const lignes = S.besoins.filter(function (b) {
       if (b.statut !== 'VALIDE') return false;
-      return estManager() ? (b.traite_par_poste === 'Responsable' || b.traite_par_poste === 'Manager') : valideParMoi(b);
+      return estManager() || (exporteur && !estBO()) ? (b.traite_par_poste === 'Responsable' || b.traite_par_poste === 'Manager') : valideParMoi(b);
     }).sort(function (a, b) { return String(a.site).localeCompare(String(b.site)) || String(a.id).localeCompare(String(b.id)); });
-    if (!lignes.length) { toast(estManager() ? 'Aucun besoin validé par les responsables ou les managers pour le moment.' : 'Vous n\'avez encore validé aucun besoin.', 'err'); return; }
+    if (!lignes.length) { toast(estManager() || (exporteur && !estBO()) ? 'Aucun besoin validé par Zeinab Kone, Yaya Comara ou les managers pour le moment.' : 'Vous n\'avez encore validé aucun besoin.', 'err'); return; }
     const feuille = function (rows, largeurs) {
       const ws = XLSX.utils.json_to_sheet(rows);
       ws['!cols'] = largeurs.map(function (w) { return { wch: w }; });

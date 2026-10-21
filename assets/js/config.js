@@ -47,6 +47,9 @@ window.APP_CONFIG = {
     'Yaya Comara': { postes: ['Caissière ordinaire'], personnes: ['Kader Soro', 'Isaac Kone', 'Kady Bakayoko', 'Yasmine Kamagate'] },
   },
   POSTES_MANAGER: ['Responsable', 'Manager'], // postes dont les besoins sont validés par les Managers
+  // Personnes du siège qui exportent en Excel tous les besoins validés, sans les valider elles-mêmes.
+  // À garder identique à EXPORTEURS dans apps-script/Code.gs.
+  EXPORTEURS: ['Rita Kessie'],
 
   // Types de besoin pour lesquels on demande l'année d'acquisition et l'état de l'équipement actuel.
   TYPES_EQUIPEMENT_ACTUEL: ['Remplacement Équipement Défectueux', 'Renouvellement'],

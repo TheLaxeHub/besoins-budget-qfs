@@ -62,6 +62,7 @@
     }
     return '';
   };
+  const estExporteur = function (s) { return !!s.id && (C.EXPORTEURS || []).indexOf(s.nom) >= 0; };
   const estValideur = function (s) { return s.poste === 'Manager' || (s.poste === 'Responsable' && !!C.VALIDEURS[s.nom]); };
   const peutDecider = function (s, b) {
     const v = valideurDe(b);
@@ -94,6 +95,7 @@
     peutDecider: peutDecider,
     valideurDe: valideurDe,
     estValideur: estValideur,
+    estExporteur: estExporteur,
     annuaire: function () { return req('annuaire'); },
     envoyerCode: function (d) { return req('envoyerCode', null, d); },
     verifierCode: function (d) { return req('verifierCode', null, d); },
