@@ -39,17 +39,18 @@ window.APP_CONFIG = {
     { libelle: 'Manager', siege: true, ico: 'crown', aide: 'Siège · valide', personnes: ['Issa Kone', 'Jansenus Koffi'] },
   ],
 
-  // Qui valide les besoins de qui (poste du demandeur → poste du valideur).
-  // À garder identique à VALIDATION dans apps-script/Code.gs.
-  VALIDATION: {
-    'Caissière ordinaire': 'Responsable',
-    'Caissière E-money': 'Responsable',
-    'Chef': 'Responsable',
-    'Opérateur': 'Responsable',
-    'Assistant': 'Responsable',
-    'Responsable': 'Manager',
-    'Manager': 'Manager',
+  // Responsables valideurs : chacun valide les besoins d'un poste en agence et de personnes du siège.
+  // Les autres responsables ne valident pas. Les Managers valident les besoins des Responsables et des Managers.
+  // À garder identique à VALIDEURS dans apps-script/Code.gs.
+  VALIDEURS: {
+    'Zeinab Kone': { postes: ['Caissière E-money'], personnes: ['Aminata Sow', 'Anne Adjo', 'Axel Kouamenan'] },
+    'Yaya Comara': { postes: ['Caissière ordinaire'], personnes: ['Kader Soro', 'Isaac Kone', 'Kady Bakayoko', 'Yasmine Kamagate'] },
   },
+  POSTES_MANAGER: ['Responsable', 'Manager'], // postes dont les besoins sont validés par les Managers
+
+  // Types de besoin pour lesquels on demande l'année d'acquisition et l'état de l'équipement actuel.
+  TYPES_EQUIPEMENT_ACTUEL: ['Remplacement Équipement Défectueux', 'Renouvellement'],
+  ETATS_EQUIPEMENT: ['Hors service', 'En panne (réparable)', 'Défectueux / fonctionne mal', 'Usé / vétuste', 'Fonctionnel'],
 
   OTP_MINUTES: 5,                // validité du code envoyé par e-mail
 

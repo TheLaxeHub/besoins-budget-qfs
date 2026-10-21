@@ -113,7 +113,6 @@
       <a href="#sec-reg" class="sb-a"><i data-lucide="list-checks"></i><span id="sbReg">Registre</span></a>
       <a href="#sec-synth" class="sb-a bo-only"><i data-lucide="building-2"></i>Synthèse par site</a>
       <a href="#sec-art" class="sb-a bo-only"><i data-lucide="package"></i>Articles consolidés</a>
-      <a href="#sec-alertes" class="sb-a"><i data-lucide="bell"></i>Points d'attention</a>
       <button type="button" class="sb-a" id="sbNew"><i data-lucide="circle-plus"></i>Exprimer un besoin<span class="sb-n" id="sbCart" hidden></span></button>
     </nav>
     <div class="sb-foot">
@@ -150,8 +149,6 @@
         </div>
         <div class="pg-act">
           <button type="button" class="btn bo bo-only" id="btnXlsx" title="Exporter en Excel les besoins validés"><i data-lucide="file-spreadsheet"></i>Excel</button>
-          <button type="button" class="btn bo" id="btnPrint" title="Imprimer ou enregistrer en PDF"><i data-lucide="printer"></i>PDF</button>
-          <button type="button" class="btn bp" id="btnNew"><i data-lucide="plus"></i>Exprimer un besoin</button>
         </div>
       </header>
 
@@ -159,21 +156,6 @@
 
       <!-- Filtres -->
       <div class="card flt">
-        <div class="fg">
-          <label for="fPeriode">Période (date de saisie)</label>
-          <select id="fPeriode" class="in">
-            <option value="jour">Aujourd'hui</option>
-            <option value="7j">7 derniers jours</option>
-            <option value="30j">30 derniers jours</option>
-            <option value="mois">Mois en cours</option>
-            <option value="tout" selected>Toute la campagne</option>
-            <option value="perso">Personnalisée…</option>
-          </select>
-        </div>
-        <div class="fg" id="fDates" hidden>
-          <label>Du … au</label>
-          <div class="fdates"><input type="date" id="fDu" class="in" aria-label="Du"><input type="date" id="fAu" class="in" aria-label="Au"></div>
-        </div>
         <div class="fg bo-only">
           <label for="fVue">Afficher</label>
           <select id="fVue" class="in">
@@ -258,7 +240,7 @@
               <thead><tr>
                 <th class="bo-only ck"><input type="checkbox" id="ckAll" aria-label="Tout sélectionner"></th>
                 <th>N°</th><th>Saisi le</th><th class="bo-only">Site / demandeur</th><th>Catégorie</th><th>Article</th>
-                <th class="num">Qté</th><th>Type</th><th>Bénéficiaire</th><th>Motif</th><th>Statut</th><th class="num">Qté validée</th>
+                <th class="num">Qté</th><th>Type</th><th>Équipement actuel</th><th>Motif</th><th>Statut</th><th class="num">Qté validée</th>
               </tr></thead>
               <tbody id="tbody"></tbody>
             </table>
@@ -302,12 +284,6 @@
         </div>
       </section>
 
-      <!-- Points d'attention -->
-      <section id="sec-alertes">
-        <div class="sh"><h2 class="sh-t">Points d'attention</h2></div>
-        <div class="ag" id="alerts"></div>
-      </section>
-
       <footer class="ft" id="ftText"></footer>
     </main>
   </div>
@@ -338,7 +314,7 @@
     <ol class="stp" id="nSteps">
       <li data-step="1"><span class="stp-n">1</span><span class="stp-l">Catégorie</span></li>
       <li data-step="2"><span class="stp-n">2</span><span class="stp-l">Article</span></li>
-      <li data-step="3"><span class="stp-n">3</span><span class="stp-l">Justification</span></li>
+      <li data-step="3"><span class="stp-n">3</span><span class="stp-l">Motif</span></li>
       <li data-step="4"><span class="stp-n">4</span><span class="stp-l">Panier &amp; envoi</span></li>
     </ol>
     <div class="mdl-bd">
@@ -369,19 +345,20 @@
         </div>
         <label class="fl" for="nCar">Caractéristiques</label>
         <input class="in" id="nCar" placeholder="Ex. : HP ProBook, Core i7, 16 Go RAM, 512 Go SSD" autocomplete="off">
+        <div class="eq" id="nEq" hidden>
+          <p class="eq-t"><i data-lucide="history"></i>Équipement actuel à remplacer / renouveler</p>
+          <div class="fr">
+            <div class="fcol"><label class="fl" for="nAnnee">Année d'acquisition de l'équipement actuel *</label><input class="in" id="nAnnee" type="number" inputmode="numeric" min="1980" step="1" placeholder="Ex. : 2019"></div>
+            <div class="fcol"><label class="fl" for="nEtat">État de l'équipement actuel *</label><select class="in" id="nEtat"></select></div>
+          </div>
+        </div>
       </section>
 
       <!-- Étape 3 : justification -->
       <section class="nstep" data-step="3" hidden>
-        <div class="fr">
-          <div class="fcol"><label class="fl" for="nServ">Service bénéficiaire *</label><input class="in" id="nServ" placeholder="Ex. : QFS/EMONEY" autocomplete="off"></div>
-          <div class="fcol"><label class="fl" for="nPers">Personne bénéficiaire</label><input class="in" id="nPers" placeholder="Nom ou fonction" autocomplete="off"></div>
-        </div>
         <label class="fl" for="nMotif">Motif / justification *</label>
         <textarea class="in" id="nMotif" rows="3" placeholder="Pourquoi ce besoin ? C'est l'élément clé pour la validation."></textarea>
         <div class="quick" id="nQuick"></div>
-        <label class="fl" for="nCom">Commentaires</label>
-        <textarea class="in" id="nCom" rows="2" placeholder="Informations complémentaires (facultatif)"></textarea>
       </section>
 
       <!-- Étape 4 : panier -->

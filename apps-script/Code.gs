@@ -32,16 +32,17 @@ const SITES = [
 const POSTES_SITE = ['Caissière ordinaire', 'Caissière E-money'];
 const POSTES_SIEGE = ['Opérateur', 'Assistant', 'Chef', 'Responsable', 'Manager'];
 
-// Poste du demandeur → poste qui valide. À garder identique à VALIDATION dans assets/js/config.js.
-const VALIDATION = {
-  'Caissière ordinaire': 'Responsable',
-  'Caissière E-money': 'Responsable',
-  'Chef': 'Responsable',
-  'Opérateur': 'Responsable',
-  'Assistant': 'Responsable',
-  'Responsable': 'Manager',
-  'Manager': 'Manager',
+// Responsables valideurs (à garder identique à VALIDEURS dans assets/js/config.js).
+// Les autres responsables ne valident pas. Les Managers valident les besoins des postes POSTES_MANAGER.
+const VALIDEURS = {
+  'Zeinab Kone': { postes: ['Caissière E-money'], personnes: ['Aminata Sow', 'Anne Adjo', 'Axel Kouamenan'] },
+  'Yaya Comara': { postes: ['Caissière ordinaire'], personnes: ['Kader Soro', 'Isaac Kone', 'Kady Bakayoko', 'Yasmine Kamagate'] },
 };
+const POSTES_MANAGER = ['Responsable', 'Manager'];
+
+// Types pour lesquels l'année d'acquisition et l'état de l'équipement actuel sont obligatoires.
+const TYPES_EQUIPEMENT_ACTUEL = ['Remplacement Équipement Défectueux', 'Renouvellement'];
+const ETATS_EQUIPEMENT = ['Hors service', 'En panne (réparable)', 'Défectueux / fonctionne mal', 'Usé / vétuste', 'Fonctionnel'];
 
 // Valeurs initiales de l'onglet « Personnes » (modifiable ensuite directement dans la feuille).
 const PERSONNES_INIT = [
@@ -73,8 +74,9 @@ const COLS = [
   'id', 'ref', 'cree_le', 'site', 'demandeur', 'categorie', 'type_besoin', 'libelle', 'quantite',
   'caracteristiques', 'service', 'personne', 'motif', 'commentaires', 'statut', 'quantite_validee',
   'commentaire_bo', 'traite_par', 'maj_le', 'poste', 'demandeur_id', 'traite_par_poste', 'traite_par_id',
+  'annee_acquisition', 'etat_actuel',
 ];
-const NUMERIQUES = ['quantite', 'quantite_validee'];
+const NUMERIQUES = ['quantite', 'quantite_validee', 'annee_acquisition'];
 
 /* ------------------------------------------------------------------ */
 /* Points d'entrée                                                     */
@@ -246,18 +248,30 @@ function estMien_(s, b) {
   return b.site === s.site && b.demandeur === s.nom && b.poste === s.poste;
 }
 
-function peutVoir_(s, b) {
-  if (s.poste === 'Manager') return true;
-  if (estMien_(s, b)) return true;
-  if (s.poste === 'Responsable') return VALIDATION[b.poste] === 'Responsable';
-  if (POSTES_SITE.indexOf(s.poste) >= 0) return b.site === s.site && POSTES_SITE.indexOf(b.poste) >= 0;
-  return false;
+/** Nom du responsable qui valide ce besoin, 'Managers', ou '' si personne n'est désigné. */
+function valideurDe_(b) {
+  if (POSTES_MANAGER.indexOf(b.poste) >= 0) return 'Managers';
+  const noms = Object.keys(VALIDEURS);
+  for (let i = 0; i < noms.length; i++) {
+    const v = VALIDEURS[noms[i]];
+    if (v.postes.indexOf(b.poste) >= 0) return noms[i];
+    if (b.demandeur_id && v.personnes.indexOf(b.demandeur) >= 0) return noms[i];
+  }
+  return '';
 }
 
 function peutDecider_(s, b) {
-  if (VALIDATION[b.poste] !== s.poste) return false;
-  if (s.poste === 'Responsable' && estMien_(s, b)) return false; // un responsable ne valide pas ses propres besoins
-  return true;
+  const v = valideurDe_(b);
+  if (s.poste === 'Manager') return v === 'Managers';
+  return s.poste === 'Responsable' && v === s.nom && !estMien_(s, b); // un responsable ne valide pas ses propres besoins
+}
+
+function peutVoir_(s, b) {
+  if (s.poste === 'Manager') return true;
+  if (estMien_(s, b)) return true;
+  if (s.poste === 'Responsable') return peutDecider_(s, b);
+  if (POSTES_SITE.indexOf(s.poste) >= 0) return b.site === s.site && POSTES_SITE.indexOf(b.poste) >= 0;
+  return false;
 }
 
 /* ------------------------------------------------------------------ */
@@ -350,18 +364,26 @@ function valider_(d, k) {
     libelle: texte_(d.libelle, 120),
     quantite: Math.round(Number(d.quantite)),
     caracteristiques: texte_(d.caracteristiques, 300),
-    service: texte_(d.service, 80),
-    personne: texte_(d.personne, 80),
+    service: '',
+    personne: '',
     motif: texte_(d.motif, 1000),
-    commentaires: texte_(d.commentaires, 1000),
+    commentaires: '',
+    annee_acquisition: '',
+    etat_actuel: '',
   };
   const l = 'Ligne ' + (k + 1) + ' : ';
   if (CATEGORIES.indexOf(it.categorie) < 0) throw erreur_('VALIDATION', l + 'catégorie invalide.');
   if (!it.type_besoin) throw erreur_('VALIDATION', l + 'type de besoin manquant.');
   if (!it.libelle) throw erreur_('VALIDATION', l + 'libellé manquant.');
   if (!(it.quantite > 0)) throw erreur_('VALIDATION', l + 'la quantité doit être supérieure à 0.');
-  if (!it.service) throw erreur_('VALIDATION', l + 'service bénéficiaire manquant.');
   if (!it.motif) throw erreur_('VALIDATION', l + 'motif manquant.');
+  if (TYPES_EQUIPEMENT_ACTUEL.indexOf(it.type_besoin) >= 0) {
+    const annee = Math.round(Number(d.annee_acquisition));
+    if (!(annee >= 1980 && annee <= new Date().getFullYear())) throw erreur_('VALIDATION', l + "année d'acquisition de l'équipement actuel invalide.");
+    if (ETATS_EQUIPEMENT.indexOf(String(d.etat_actuel)) < 0) throw erreur_('VALIDATION', l + "état de l'équipement actuel manquant.");
+    it.annee_acquisition = annee;
+    it.etat_actuel = String(d.etat_actuel);
+  }
   return it;
 }
 
@@ -402,11 +424,11 @@ function synthese_(ss) {
   const sy = ss.insertSheet('Synthese');
   sy.getRange('A1').setValue('Quantités par catégorie et article (hors rejets)');
   sy.getRange('A2').setFormula(
-    '=IFERROR(QUERY(Besoins!A1:W, "select F, H, count(A), sum(I), sum(P) where A is not null and O <> \'REJETE\' ' +
+    '=IFERROR(QUERY(Besoins!A1:Y, "select F, H, count(A), sum(I), sum(P) where A is not null and O <> \'REJETE\' ' +
     'group by F, H order by F, sum(I) desc label F \'Catégorie\', H \'Article\', count(A) \'Lignes\', sum(I) \'Qté demandée\', sum(P) \'Qté validée\'", 1), "Aucune donnée")');
   sy.getRange('H1').setValue('Quantités demandées par site et catégorie (hors rejets)');
   sy.getRange('H2').setFormula(
-    '=IFERROR(QUERY(Besoins!A1:W, "select D, sum(I) where A is not null and O <> \'REJETE\' group by D pivot F label D \'Site\'", 1), "Aucune donnée")');
+    '=IFERROR(QUERY(Besoins!A1:Y, "select D, sum(I) where A is not null and O <> \'REJETE\' group by D pivot F label D \'Site\'", 1), "Aucune donnée")');
   sy.getRange('A1:N1').setFontWeight('bold').setFontColor('#0D47A1');
   sy.setColumnWidth(2, 280);
 }

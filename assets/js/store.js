@@ -47,7 +47,7 @@
 
   /* ---------------- Mode démonstration (navigateur) ---------------- */
 
-  const CLE_DEMO = 'bud27_demo_v2';
+  const CLE_DEMO = 'bud27_demo_v3';
   function lireDemo() {
     try { return JSON.parse(localStorage.getItem(CLE_DEMO)) || { seq: 0, besoins: [], otp: {}, sessions: {} }; } catch (e) { return { seq: 0, besoins: [], otp: {}, sessions: {} }; }
   }
@@ -84,16 +84,30 @@
     return { ok: true, token: token, session: s };
   }
   const estMien = function (s, b) { return s.id ? b.demandeur_id === s.id : b.site === s.site && b.demandeur === s.nom && b.poste === s.poste; };
+  // Nom du valideur d'un besoin (ou « Managers »). Mêmes règles que valideurDe_ dans Code.gs.
+  const valideurDe = function (b) {
+    if (C.POSTES_MANAGER.indexOf(b.poste) >= 0) return 'Managers';
+    const noms = Object.keys(C.VALIDEURS);
+    for (let i = 0; i < noms.length; i++) {
+      const v = C.VALIDEURS[noms[i]];
+      if (v.postes.indexOf(b.poste) >= 0) return noms[i];
+      if (b.demandeur_id && v.personnes.indexOf(b.demandeur) >= 0) return noms[i];
+    }
+    return '';
+  };
+  const estValideur = function (s) { return s.poste === 'Manager' || (s.poste === 'Responsable' && !!C.VALIDEURS[s.nom]); };
+  const peutDecider = function (s, b) {
+    const v = valideurDe(b);
+    if (s.poste === 'Manager') return v === 'Managers';
+    return s.poste === 'Responsable' && v === s.nom && !estMien(s, b);
+  };
   const peutVoir = function (s, b) {
     if (s.poste === 'Manager' || estMien(s, b)) return true;
-    if (s.poste === 'Responsable') return C.VALIDATION[b.poste] === 'Responsable';
+    if (s.poste === 'Responsable') return peutDecider(s, b);
     if (POSTES_SITE.indexOf(s.poste) >= 0) return b.site === s.site && POSTES_SITE.indexOf(b.poste) >= 0;
     return false;
   };
-  const peutDecider = function (s, b) {
-    if (C.VALIDATION[b.poste] !== s.poste) return false;
-    return !(s.poste === 'Responsable' && estMien(s, b));
-  };
+  const besoinEquipement = function (type) { return C.TYPES_EQUIPEMENT_ACTUEL.indexOf(type) >= 0; };
 
   const demo = {
     annuaire: function () {
@@ -153,15 +167,20 @@
       const now = new Date().toISOString();
       const ref = 'B27-' + String(++db.seq).padStart(4, '0');
       const crees = items.map(function (it, k) {
-        if (CATS.indexOf(it.categorie) < 0 || !it.libelle || !it.type_besoin || !(it.quantite > 0) || !it.service || !it.motif) {
+        if (CATS.indexOf(it.categorie) < 0 || !it.libelle || !it.type_besoin || !(it.quantite > 0) || !it.motif) {
           throw erreur('VALIDATION', 'Ligne ' + (k + 1) + ' incomplète.');
+        }
+        if (besoinEquipement(it.type_besoin) && (!(Number(it.annee_acquisition) > 1980) || C.ETATS_EQUIPEMENT.indexOf(it.etat_actuel) < 0)) {
+          throw erreur('VALIDATION', 'Ligne ' + (k + 1) + " : année d'acquisition et état de l'équipement actuel obligatoires.");
         }
         return {
           id: ref + '-' + String(k + 1).padStart(2, '0'), ref: ref, cree_le: now, site: s.site,
           demandeur: s.nom, poste: s.poste, demandeur_id: s.id || '', categorie: it.categorie,
           type_besoin: texte(it.type_besoin, 60), libelle: texte(it.libelle, 120), quantite: Math.round(Number(it.quantite)),
-          caracteristiques: texte(it.caracteristiques, 300), service: texte(it.service, 80),
-          personne: texte(it.personne, 80), motif: texte(it.motif, 1000), commentaires: texte(it.commentaires, 1000),
+          caracteristiques: texte(it.caracteristiques, 300), service: '', personne: '',
+          motif: texte(it.motif, 1000), commentaires: '',
+          annee_acquisition: besoinEquipement(it.type_besoin) ? Number(it.annee_acquisition) : '',
+          etat_actuel: besoinEquipement(it.type_besoin) ? it.etat_actuel : '',
           statut: 'EN_ATTENTE', quantite_validee: '', commentaire_bo: '', traite_par: '', traite_par_poste: '', traite_par_id: '', maj_le: now,
         };
       });
@@ -220,6 +239,8 @@
     // Règles partagées avec l'interface (le serveur applique les mêmes).
     estMien: estMien,
     peutDecider: peutDecider,
+    valideurDe: valideurDe,
+    estValideur: estValideur,
     annuaire: function () { return req('annuaire'); },
     envoyerCode: function (d) { return req('envoyerCode', null, d); },
     verifierCode: function (d) { return req('verifierCode', null, d); },

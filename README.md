@@ -25,35 +25,33 @@ La session reste ouverte sur l'appareil jusqu'à « Se déconnecter » (6 h maxi
 
 ### Qui valide quoi
 
-| Demandeur | Validé par |
+| Valideur | Valide les besoins de |
 |---|---|
-| Caissière ordinaire, Caissière E-money | Responsables |
-| Chef, Assistant, Opérateur | Responsables |
-| Responsable | Managers |
-| Manager | Managers (y compris ses propres besoins) |
+| **Zeinab Kone** (Responsable) | Caissières E-money, Aminata Sow, Anne Adjo, Axel Kouamenan |
+| **Yaya Comara** (Responsable) | Caissières ordinaires, Kader Soro, Isaac Kone, Kady Bakayoko, Yasmine Kamagate |
+| **Managers** (Issa Kone, Jansenus Koffi) | Tous les Responsables (dont Massandje Dagnoko et Rita Kessie) et les Managers eux-mêmes |
 
-Un responsable ne valide jamais ses propres besoins : c'est un manager qui s'en charge. Le réglage se trouve dans `VALIDATION` (`config.js` et `Code.gs`).
+Massandje Dagnoko et Rita Kessie sont Responsables mais ne valident pas : elles expriment leurs besoins, qui sont validés par les Managers. Un responsable ne valide jamais ses propres besoins. Le réglage se trouve dans `VALIDEURS` (`config.js` et `Code.gs`) : une personne ajoutée dans l'onglet `Personnes` doit aussi y être rattachée à un valideur.
 
 ### Saisie (tous les postes)
-- **Exprimer un besoin** avec un assistant en 4 étapes :
+- **Exprimer un besoin**, depuis la barre latérale, avec un assistant en 4 étapes :
   1. **Catégorie** : Informatique, Mobilier ou Achats.
   2. **Article** : type de besoin, article (ou « Autre (préciser) »), quantité, caractéristiques.
-  3. **Justification** : service bénéficiaire, personne bénéficiaire, **motif**, commentaires.
+  3. **Motif** : la justification du besoin, obligatoire. Pour un *Remplacement d'équipement défectueux* ou un *Renouvellement*, l'étape 2 demande aussi l'**année d'acquisition** et l'**état de l'équipement actuel** (Hors service, En panne (réparable), Défectueux / fonctionne mal, Usé / vétuste, Fonctionnel).
   4. **Panier et envoi** : on ajoute autant de lignes que nécessaire, puis on envoie tout en une fois. Le nom, le poste et le site viennent de la connexion. Chaque envoi reçoit une référence (`B27-0001`).
 - **Suivi** : les caissières voient les besoins des caissières de leur site, les autres postes voient leurs propres besoins. Un besoin encore en attente peut être retiré par son auteur.
 
 ### Validation (Responsables et Managers)
-- **Affichage** : besoins que je valide, besoins validés par moi, mes propres besoins, ou tous les besoins visibles.
+- **Filtres** : affichage (besoins que je valide, validés par moi, mes propres besoins, tous), site, catégorie, type de besoin.
 - **Décision** : Valider (quantité validée modifiable), Rejeter (commentaire obligatoire) ou Remettre en attente. La décision est enregistrée au nom de la personne connectée.
 - **Décision groupée** : cocher plusieurs lignes, puis les valider ou les rejeter en une fois.
 - **Synthèse par site** et **articles consolidés**.
-- **Export Excel** :
+- **Export Excel** (toujours complet, sans tenir compte des filtres de l'écran) :
   - **Responsable** : les besoins qu'**il a validés**.
   - **Manager** : les besoins validés par **les responsables et les managers** (dont lui-même).
   - Le fichier contient trois onglets : Besoins validés, Articles consolidés, Synthèse par site.
 
 ### Pour tous
-- Impression / **PDF** du tableau de bord.
 - Utilisable sur ordinateur et sur téléphone.
 
 ### Statuts
@@ -116,7 +114,8 @@ Tout se règle dans [`assets/js/config.js`](assets/js/config.js) :
 | `CATEGORIES` | Catégories (libellé, icône, couleur) et **articles proposés**. Les codes doivent rester identiques à `CATEGORIES` dans `Code.gs`. |
 | `CATEGORIES[].types` | Types de besoin proposés pour chaque catégorie (`TYPES_BESOIN` = liste complète pour les filtres). |
 | `POSTES` | Postes proposés à la connexion (en agence / au siège). |
-| `VALIDATION` | Qui valide les besoins de quel poste (à garder identique dans `Code.gs`). |
+| `VALIDEURS`, `POSTES_MANAGER` | Qui valide les besoins de qui (à garder identique dans `Code.gs`). |
+| `TYPES_EQUIPEMENT_ACTUEL`, `ETATS_EQUIPEMENT` | Types de besoin qui demandent l'équipement actuel, et états proposés. |
 | `OTP_MINUTES` | Durée de validité du code envoyé par e-mail (affichage ; la valeur serveur est dans `Code.gs`). |
 | `MOTIFS_RAPIDES` | Motifs ajoutés en un clic. |
 | `DATE_LIMITE` | Date limite de saisie (`AAAA-MM-JJ`), affichée aux sites avec un compte à rebours. |

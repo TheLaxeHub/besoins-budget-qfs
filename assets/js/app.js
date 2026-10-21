@@ -54,10 +54,12 @@
   const joursDepuis = function (v) { const d = date(v); return d ? (Date.now() - d) / 864e5 : 0; };
   const sansAccents = function (s) { return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); };
   // « Valideur » = Responsable ou Manager (la vue Back Office n'existe plus).
-  const estBO = function () { return !!S.session && (S.session.poste === 'Responsable' || S.session.poste === 'Manager'); };
+  const estBO = function () { return !!S.session && Store.estValideur(S.session); };
   const estManager = function () { return !!S.session && S.session.poste === 'Manager'; };
   const peutDecider = function (b) { return !!S.session && Store.peutDecider(S.session, b); };
   const estMien = function (b) { return !!S.session && Store.estMien(S.session, b); };
+  const valideurTxt = function (b) { const v = Store.valideurDe(b); return v === 'Managers' ? 'les managers' : v || 'non désigné'; };
+  const equipTxt = function (b) { return b.annee_acquisition || b.etat_actuel ? [b.annee_acquisition ? 'Acquis en ' + b.annee_acquisition : '', b.etat_actuel].filter(Boolean).join(' · ') : ''; };
   const valideParMoi = function (b) { return !!S.session && b.traite_par_id === S.session.id && !!S.session.id; };
   const cleUser = function () { return (S.session.id || (S.session.site + '_' + S.session.nom)).toLowerCase(); };
   const initiales = function (n) { return String(n).split(/\s+/).filter(Boolean).slice(0, 2).map(function (x) { return x.charAt(0).toUpperCase(); }).join(''); };
@@ -95,7 +97,6 @@
     effacer: function (k) { try { localStorage.removeItem(k); } catch (e) { /* mode privé */ } },
   };
   const clePanier = function () { return 'bud27_panier_' + cleUser(); };
-  const cleService = function () { return 'bud27_service_' + cleUser(); };
   const typesDe = function (code) { return cat(code).types || C.TYPES_BESOIN; };
 
   /* ================= Connexion : poste → site → accès ================= */
@@ -373,7 +374,7 @@
     $('#pgIco').innerHTML = ico((posteDef(ss.poste) || {}).ico || 'user');
     $('#pgEyebrow').textContent = 'E-Money · ' + ss.poste + ' · ' + ss.site;
     $('#regTitle').textContent = bo
-      ? (estManager() ? 'Besoins — validation des responsables et des managers' : 'Besoins — validation des caissières, chefs, opérateurs et assistants')
+      ? (estManager() ? 'Besoins — validation des responsables et des managers' : 'Besoins — validation ' + ss.nom)
       : caisse ? 'Besoins des caissières — ' + ss.site : 'Mes besoins';
     $('#fVue').value = S.filtres.vue;
     $('#ftText').textContent = 'Quipux Financial Services — ' + C.APP_TITRE + ' · ' + new Date().getFullYear();
@@ -395,13 +396,6 @@
 
     const surFiltre = function () { S.limite = PAR_PAGE; rendre(); };
     $('#fVue').addEventListener('change', function (e) { S.filtres.vue = e.target.value; S.selection = {}; surFiltre(); });
-    $('#fPeriode').addEventListener('change', function (e) {
-      S.filtres.periode = e.target.value;
-      $('#fDates').hidden = e.target.value !== 'perso';
-      surFiltre();
-    });
-    $('#fDu').addEventListener('change', function (e) { S.filtres.du = e.target.value; surFiltre(); });
-    $('#fAu').addEventListener('change', function (e) { S.filtres.au = e.target.value; surFiltre(); });
     $('#fSite').addEventListener('change', function (e) { S.filtres.site = e.target.value; surFiltre(); });
     $('#fCat').addEventListener('change', function (e) { S.filtres.cat = e.target.value; surFiltre(); });
     $('#fType').addEventListener('change', function (e) { S.filtres.type = e.target.value; surFiltre(); });
@@ -467,14 +461,6 @@
       rendreTable(filtrer());
       document.getElementById('sec-reg').scrollIntoView({ behavior: 'smooth' });
     });
-    $('#alerts').addEventListener('click', function (e) {
-      const c = e.target.closest('[data-id]');
-      if (c) { ouvrirPanneau(c.dataset.id); return; }
-      const s = e.target.closest('[data-site-vide]');
-      if (s) toast(s.dataset.siteVide + " n'a encore exprimé aucun besoin.");
-    });
-
-    $('#btnNew').addEventListener('click', ouvrirSaisie);
     $('#sbNew').addEventListener('click', function () { menu(false); ouvrirSaisie(); });
     $('#sbToggle').addEventListener('click', function () { menu(!document.body.classList.contains('sb-open')); });
     $('#sbOv').addEventListener('click', function () { menu(false); });
@@ -486,7 +472,6 @@
     });
     $('#btnRefresh').addEventListener('click', function () { actualiser(); });
     $('#btnXlsx').addEventListener('click', exporterExcel);
-    $('#btnPrint').addEventListener('click', function () { window.print(); });
     $('#btnLogout').addEventListener('click', function () { deconnecter(); });
 
     $('#ov').addEventListener('click', fermerPanneau);
@@ -516,10 +501,6 @@
   function synchroniserFiltres() {
     const f = S.filtres;
     $('#fVue').value = f.vue;
-    $('#fPeriode').value = f.periode;
-    $('#fDates').hidden = f.periode !== 'perso';
-    $('#fDu').value = f.du;
-    $('#fAu').value = f.au;
     $('#fSite').value = f.site;
     $('#fCat').value = f.cat;
     $('#fType').value = f.type;
@@ -566,13 +547,6 @@
     }
   }
 
-  function libellePeriode() {
-    const f = S.filtres;
-    const l = { jour: "Aujourd'hui", '7j': '7 derniers jours', '30j': '30 derniers jours', mois: 'Mois en cours', tout: 'Toute la campagne' };
-    if (f.periode === 'perso') return (f.du ? 'du ' + fDate(f.du) : '') + (f.au ? ' au ' + fDate(f.au) : '') || 'Personnalisée';
-    return l[f.periode] || '';
-  }
-
   function filtrer(options) {
     const o = options || {};
     const f = S.filtres;
@@ -614,10 +588,8 @@
   function rendre() {
     const liste = filtrer();
     const st = stats(liste);
-    $('#pgMeta').textContent = 'Période : ' + libellePeriode() +
-      (S.filtres.site ? ' · Site : ' + S.filtres.site : '') +
-      ' · Mis à jour à ' + fHeure(S.synchro);
-    $('#shPeriode').textContent = libellePeriode();
+    $('#pgMeta').textContent = C.CAMPAGNE + (S.filtres.site ? ' · Site : ' + S.filtres.site : '') + ' · Mis à jour à ' + fHeure(S.synchro);
+    $('#shPeriode').textContent = 'Campagne ' + C.CAMPAGNE;
     $('#tbSync').textContent = 'Données du ' + fDateHeure(S.synchro);
     rendreProgression(st);
     rendreKpis(st);
@@ -625,7 +597,6 @@
     rendreTable(liste);
     if (estBO()) rendreSynthese(filtrer({ ignorerSite: true }));
     rendreArticles(liste);
-    rendreAlertes(liste);
     icones();
   }
 
@@ -641,7 +612,7 @@
     }).join('');
     $('#psum').textContent = st.n
       ? st.traites + ' ligne(s) examinée(s) sur ' + st.n + ' — ' + st.EN_ATTENTE + ' encore en attente (' + nombre(st.qteAttente) + ' unité(s)).'
-      : 'Aucun besoin exprimé sur la période sélectionnée.';
+      : 'Aucun besoin pour les filtres choisis.';
   }
 
   function rendreKpis(st) {
@@ -652,7 +623,6 @@
     const parCat = CATS.map(function (c) { return c.libelle + ' ' + nombre(somme(filtrer().filter(function (b) { return b.categorie === c.code; }), function (b) { return b.quantite; })); }).join(' · ');
     const aValider = S.besoins.filter(function (b) { return b.statut === 'EN_ATTENTE' && peutDecider(b); });
     $('#kpis').innerHTML = [
-      k('clipboard-list', 'Lignes de besoin', nombre(st.n), estBO() ? 'selon l\'affichage choisi' : 'sur la période', '#1d4ed8'),
       k('package', 'Quantité demandée', nombre(st.qte), parCat, '#111827'),
       estBO()
         ? k('stamp', 'À valider par vous', nombre(aValider.length), aValider.length ? nombre(somme(aValider, function (b) { return b.quantite; })) + ' unité(s) en attente de votre décision' : 'rien en attente', '#9333ea')
@@ -763,7 +733,7 @@
     const q = sansAccents(f.q).trim();
     if (q) {
       lignes = lignes.filter(function (b) {
-        return sansAccents([b.id, b.ref, b.site, b.libelle, b.caracteristiques, b.service, b.personne, b.motif, b.demandeur, b.poste, b.type_besoin].join(' ')).includes(q);
+        return sansAccents([b.id, b.ref, b.site, b.libelle, b.caracteristiques, b.etat_actuel, b.motif, b.demandeur, b.poste, b.type_besoin].join(' ')).includes(q);
       });
     }
     const comptes = {};
@@ -796,7 +766,7 @@
         '<td><b>' + esc(b.libelle) + '</b>' + (b.caracteristiques ? '<div class="sub clip" title="' + esc(b.caracteristiques) + '">' + esc(b.caracteristiques) + '</div>' : '') + '</td>' +
         '<td class="num"><span class="ib">' + nombre(b.quantite) + '</span></td>' +
         '<td class="ty">' + esc(b.type_besoin) + '</td>' +
-        '<td>' + esc(b.service) + (b.personne ? '<div class="sub">' + esc(b.personne) + '</div>' : '') + '</td>' +
+        '<td>' + (equipTxt(b) ? esc(equipTxt(b)) : '<span class="z">—</span>') + '</td>' +
         '<td><div class="clip" title="' + esc(b.motif) + '">' + esc(b.motif) + '</div></td>' +
         '<td>' + badgeStatut(b.statut) + '</td>' +
         '<td class="num">' + (b.statut === 'VALIDE' ? '<b>' + nombre(b.quantite_validee) + '</b>' : '<span class="z">—</span>') + '</td>' +
@@ -878,63 +848,6 @@
     $('#artRc').textContent = lignes.length + ' article(s) — ' + nombre(somme(lignes, function (x) { return x.qte; })) + ' unité(s) demandée(s)';
   }
 
-  function rendreAlertes(liste) {
-    const carte = function (b, detail) {
-      return '<div class="acard" data-id="' + esc(b.id) + '">' +
-        '<div class="aid2"><span class="ib">' + esc(b.id) + '</span>' + (estBO() ? '<b style="font-size:12px;color:#111827">' + esc(b.site) + '</b>' : '') + badgeStatut(b.statut) + '</div>' +
-        '<div class="anm">' + nombre(b.quantite) + ' × ' + esc(b.libelle) + '</div>' +
-        (detail ? '<div class="adet">' + detail + '</div>' : '') + '</div>';
-    };
-    const bloc = function (cls, icone, titre, sous, cartes, vide, total) {
-      return '<div class="ac ' + cls + '"><div class="ach"><div class="aic">' + ico(icone) + '</div><div><h3 class="act">' + titre + '</h3><p class="acs">' + sous + '</p></div></div>' +
-        (cartes.length ? cartes.join('') : '<div class="aempty">' + ico('circle-check') + vide + '</div>') +
-        (total > cartes.length ? '<div class="amore">… et ' + (total - cartes.length) + ' autre(s)</div>' : '') + '</div>';
-    };
-    const MAX = 5;
-    const recentes = liste.filter(function (b) { return b.statut !== 'EN_ATTENTE'; })
-      .sort(function (a, b) { return String(b.maj_le).localeCompare(String(a.maj_le)); });
-    const attente = liste.filter(function (b) { return b.statut === 'EN_ATTENTE'; })
-      .sort(function (a, b) { return String(a.cree_le).localeCompare(String(b.cree_le)); });
-    const blocDecisions = bloc('info', 'message-square-text', 'Dernières décisions', 'Validations et rejets les plus récents',
-      recentes.slice(0, MAX).map(function (b) {
-        return carte(b, (b.statut === 'VALIDE' ? 'Qté validée : <b>' + nombre(b.quantite_validee) + '</b>' : '') + (b.commentaire_bo ? (b.statut === 'VALIDE' ? ' — ' : '') + esc(b.commentaire_bo) : '') + ' <span class="z">· ' + fDateHeure(b.maj_le) + '</span>');
-      }), 'Aucune décision pour le moment.', recentes.length);
-
-    if (estBO()) {
-      const actifsSites = {};
-      filtrer({ ignorerSite: true, ignorerVue: true }).forEach(function (b) { actifsSites[b.site] = 1; });
-      const vides = C.SITES.filter(function (p) { return !actifsSites[p]; });
-      const mesAttente = S.besoins.filter(function (b) { return b.statut === 'EN_ATTENTE' && peutDecider(b); })
-        .sort(function (a, b) { return String(a.cree_le).localeCompare(String(b.cree_le)); });
-      const vieux = mesAttente.filter(function (b) { return joursDepuis(b.cree_le) >= C.SEUIL_ATTENTE_JOURS; });
-      $('#alerts').innerHTML = [
-        estManager()
-          ? bloc('crit', 'stamp', 'À valider par vous', mesAttente.length + ' ligne(s) des responsables et managers',
-            mesAttente.slice(0, MAX).map(function (b) { return carte(b, esc(b.demandeur) + ' · ' + esc(b.poste) + ' — saisi le ' + fDate(b.cree_le)); }),
-            'Aucune ligne en attente de votre décision.', mesAttente.length)
-          : bloc('crit', 'building-2', 'Sites sans aucune saisie', vides.length + ' site(s) sur ' + C.SITES.length + ' — à relancer',
-            vides.slice(0, 8).map(function (p) { return '<div class="acard" data-site-vide="' + esc(p) + '"><div class="anm">' + esc(p) + '</div></div>'; }),
-            'Tous les sites ont exprimé leurs besoins.', vides.length),
-        bloc('urg', 'hourglass', 'En attente depuis plus de ' + C.SEUIL_ATTENTE_JOURS + ' jours', vieux.length + ' ligne(s) à examiner en priorité',
-          vieux.slice(0, MAX).map(function (b) { return carte(b, 'Saisi le ' + fDate(b.cree_le) + ' — ' + Math.floor(joursDepuis(b.cree_le)) + ' j d\'attente'); }),
-          'Aucune ligne en attente prolongée.', vieux.length),
-        blocDecisions,
-      ].join('');
-    } else {
-      const rejets = liste.filter(function (b) { return b.statut === 'REJETE'; })
-        .sort(function (a, b) { return String(b.maj_le).localeCompare(String(a.maj_le)); });
-      $('#alerts').innerHTML = [
-        bloc('crit', 'circle-x', 'Besoins rejetés', 'Motif du valideur — ressaisissez si besoin',
-          rejets.slice(0, MAX).map(function (b) { return carte(b, esc(b.commentaire_bo || 'Sans commentaire')); }),
-          'Aucun besoin rejeté.', rejets.length),
-        bloc('urg', 'hourglass', 'En attente de validation', attente.length + ' ligne(s) en cours d\'examen',
-          attente.slice(0, MAX).map(function (b) { return carte(b, 'Saisi le ' + fDate(b.cree_le) + (b.demandeur ? ' par ' + esc(b.demandeur) + (b.poste ? ' (' + esc(b.poste) + ')' : '') : '')); }),
-          'Aucun besoin en attente.', attente.length),
-        blocDecisions,
-      ].join('');
-    }
-  }
-
   /* ================= Panneau détail & décisions ================= */
 
   function ouvrirPanneau(id) {
@@ -972,9 +885,10 @@
       '</div></div>' +
       '<div class="ps"><h3 class="pst">Bénéficiaire et justification</h3><div class="pg">' +
         it('Site', esc(b.site)) + it('Demandeur', esc(b.demandeur) + (b.poste ? '<div class="sub" style="font-weight:500;color:#6b7280">' + esc(b.poste) + '</div>' : '')) +
-        it('Service bénéficiaire', esc(b.service)) + it('Personne bénéficiaire', esc(b.personne)) +
+        it('Validation par', esc(valideurTxt(b))) + it('Poste', esc(b.poste)) +
+        (equipTxt(b) ? it('Année d\'acquisition de l\'équipement actuel', esc(b.annee_acquisition)) + it('État de l\'équipement actuel', esc(b.etat_actuel)) : '') +
       '</div><p class="pil" style="margin:12px 0 6px">Motif</p><div class="ptx">' + esc(b.motif) + '</div>' +
-      (b.commentaires ? '<p class="pil" style="margin:12px 0 6px">Commentaires</p><div class="ptx">' + esc(b.commentaires) + '</div>' : '') + '</div>' +
+      '</div>' +
       (b.statut !== 'EN_ATTENTE'
         ? '<div class="ps"><h3 class="pst">Décision</h3><div class="pg">' +
           it('Décision', badgeStatut(b.statut)) + it('Quantité validée', b.statut === 'VALIDE' ? '<b>' + nombre(b.quantite_validee) + '</b>' : '') +
@@ -982,16 +896,15 @@
           (b.commentaire_bo ? it('Commentaire', esc(b.commentaire_bo), true) : '') + '</div></div>'
         : '');
 
-    const valideur = C.VALIDATION[b.poste];
     if (peutDecider(b)) {
       $('#pForm').innerHTML = formDecision(b.statut === 'EN_ATTENTE' ? 'VALIDE' : b.statut, b.quantite_validee !== '' ? b.quantite_validee : b.quantite, b.commentaire_bo, true);
       brancherDecision([b.id]);
     } else if (b.statut === 'EN_ATTENTE' && estMien(b)) {
-      $('#pForm').innerHTML = '<div class="ps"><h3 class="pst">Modifier</h3><p class="cs" style="margin-bottom:6px">Validation : ' + esc(valideur ? valideur + 's' : '—') + '.</p><p class="cs" style="margin-bottom:10px">Ce besoin n\'a pas encore été examiné : vous pouvez le retirer puis le ressaisir si nécessaire.</p>' +
+      $('#pForm').innerHTML = '<div class="ps"><h3 class="pst">Modifier</h3><p class="cs" style="margin-bottom:6px">Validation par ' + esc(valideurTxt(b)) + '.</p><p class="cs" style="margin-bottom:10px">Ce besoin n\'a pas encore été examiné : vous pouvez le retirer puis le ressaisir si nécessaire.</p>' +
         '<button type="button" class="btn btn-danger" id="pRetirer">' + ico('trash-2') + 'Retirer ce besoin</button></div>';
       $('#pRetirer').addEventListener('click', function () { retirer(b); });
     } else if (b.statut === 'EN_ATTENTE') {
-      $('#pForm').innerHTML = '<div class="ps"><p class="cs">En attente de validation par les ' + esc(valideur ? valideur.toLowerCase() + 's' : 'valideurs') + '.</p></div>';
+      $('#pForm').innerHTML = '<div class="ps"><p class="cs">En attente de validation par ' + esc(valideurTxt(b)) + '.</p></div>';
     } else {
       $('#pForm').innerHTML = '';
     }
@@ -1088,6 +1001,7 @@
   /* ================= Saisie des besoins (assistant + panier) ================= */
 
   const N = { etape: 1, cat: '', type: '' };
+  const avecEquipement = function () { return C.TYPES_EQUIPEMENT_ACTUEL.indexOf(N.type) >= 0; };
 
   function initSaisie() {
     $('#nCats').innerHTML = CATS.map(function (c) {
@@ -1102,7 +1016,15 @@
       remplirArticles();
       setTimeout(function () { allerA(2); }, 120);
     });
-    $('#nTypes').addEventListener('change', function (e) { N.type = e.target.value; $('#nTypes').classList.remove('err'); });
+    $('#nTypes').addEventListener('change', function (e) {
+      N.type = e.target.value;
+      $('#nTypes').classList.remove('err');
+      $('#nEq').hidden = !avecEquipement();
+    });
+    $('#nEtat').innerHTML = '<option value="">— Sélectionner l\'état —</option>' + C.ETATS_EQUIPEMENT.map(function (e) { return '<option>' + esc(e) + '</option>'; }).join('');
+    $('#nEtat').addEventListener('change', function () { $('#nEtat').classList.remove('err'); $('#nErr').textContent = ''; });
+    $('#nAnnee').addEventListener('input', function () { $('#nErr').textContent = ''; });
+    $('#nAnnee').max = new Date().getFullYear();
     $('#nLib').addEventListener('change', function () {
       const autre = $('#nLib').value === AUTRE;
       $('#nLibAutre').hidden = !autre;
@@ -1124,7 +1046,7 @@
       t.value = t.value.trim() ? t.value.trim() + ' — ' + m : m;
       t.classList.remove('err');
     });
-    ['nLibAutre', 'nServ', 'nMotif'].forEach(function (id) {
+    ['nLibAutre', 'nMotif', 'nAnnee'].forEach(function (id) {
       $('#' + id).addEventListener('input', function () { $('#' + id).classList.remove('err'); });
     });
     $('#nSteps').addEventListener('click', function (e) {
@@ -1155,6 +1077,7 @@
     const c = cat(N.cat);
     $('#mNewTitle').textContent = 'Besoin ' + c.libelle;
     N.type = '';
+    $('#nEq').hidden = true;
     $('#nTypes').innerHTML = typesDe(N.cat).map(function (t) {
       return '<label><input type="radio" name="ntype" value="' + esc(t) + '"><span>' + esc(t) + '</span></label>';
     }).join('');
@@ -1166,10 +1089,9 @@
   }
 
   function ouvrirSaisie() {
-    const v = C.VALIDATION[S.session.poste];
+    const v = valideurTxt({ poste: S.session.poste, demandeur: S.session.nom, demandeur_id: S.session.id });
     $('#mNewSite').textContent = S.session.site + ' · ' + C.CAMPAGNE;
-    $('#nWho').innerHTML = 'Envoyé au nom de <b>' + esc(S.session.nom) + '</b> (' + esc(S.session.poste) + ', ' + esc(S.session.site) + ')' +
-      (v ? ' — validation par les <b>' + esc(v.toLowerCase()) + 's</b>.' : '.');
+    $('#nWho').innerHTML = 'Envoyé au nom de <b>' + esc(S.session.nom) + '</b> (' + esc(S.session.poste) + ', ' + esc(S.session.site) + ') — validation par <b>' + esc(v) + '</b>.';
     $('#mNew').hidden = false;
     document.body.style.overflow = 'hidden';
     if (S.panier.length) { rendrePanier(); allerA(4); } else nouvelleLigne(false);
@@ -1188,9 +1110,9 @@
     $('#nLib').innerHTML = '';
     $('#nLibAutre').hidden = true; $('#nLibAutre').value = '';
     $('#nQte').value = 1; $('#nCar').value = '';
+    $('#nAnnee').value = ''; $('#nEtat').value = ''; $('#nEq').hidden = true;
     if (!garderJustif) {
-      $('#nServ').value = memoire.lire(cleService()) || '';
-      $('#nPers').value = ''; $('#nMotif').value = ''; $('#nCom').value = '';
+      $('#nMotif').value = '';
     }
     $('#mNewTitle').textContent = 'Exprimer un besoin';
     $$('#fNew .err').forEach(function (x) { x.classList.remove('err'); });
@@ -1212,7 +1134,7 @@
     if (n === 4) $('#nSubmitTxt').textContent = 'Envoyer ' + S.panier.length + ' besoin' + (S.panier.length > 1 ? 's' : '');
     $('#nNext').innerHTML = n === 3 ? ico('shopping-cart') + 'Ajouter au panier' : 'Suivant' + ico('arrow-right');
     icones();
-    const focus = { 2: '#nLib', 3: '#nServ' }[n];
+    const focus = { 2: '#nLib', 3: '#nMotif' }[n];
     if (focus && window.innerWidth > 700) setTimeout(function () { const el = $(focus); if (el && !el.value) el.focus(); }, 60);
   }
 
@@ -1229,10 +1151,14 @@
       if (!$('#nLib').value) return erreurSaisie($('#nLib'), 'Choisissez un article.');
       if ($('#nLib').value === AUTRE && !$('#nLibAutre').value.trim()) return erreurSaisie($('#nLibAutre'), "Précisez l'article.");
       if (!((parseInt($('#nQte').value, 10) || 0) > 0)) return erreurSaisie($('.qty'), 'La quantité doit être au moins 1.');
+      if (avecEquipement()) {
+        const a = parseInt($('#nAnnee').value, 10);
+        if (!(a >= 1980 && a <= new Date().getFullYear())) return erreurSaisie($('#nAnnee'), "Indiquez l'année d'acquisition de l'équipement actuel (1980 à " + new Date().getFullYear() + ').');
+        if (!$('#nEtat').value) return erreurSaisie($('#nEtat'), "Indiquez l'état de l'équipement actuel.");
+      }
       return true;
     }
     if (n === 3) {
-      if (!$('#nServ').value.trim()) return erreurSaisie($('#nServ'), 'Indiquez le service bénéficiaire.');
       if (!$('#nMotif').value.trim()) return erreurSaisie($('#nMotif'), 'Le motif est obligatoire : il sert à la validation.');
       return true;
     }
@@ -1249,12 +1175,10 @@
       libelle: $('#nLib').value === AUTRE ? $('#nLibAutre').value.trim() : $('#nLib').value,
       quantite: parseInt($('#nQte').value, 10),
       caracteristiques: $('#nCar').value.trim(),
-      service: $('#nServ').value.trim(),
-      personne: $('#nPers').value.trim(),
       motif: $('#nMotif').value.trim(),
-      commentaires: $('#nCom').value.trim(),
+      annee_acquisition: avecEquipement() ? parseInt($('#nAnnee').value, 10) : '',
+      etat_actuel: avecEquipement() ? $('#nEtat').value : '',
     });
-    memoire.ecrire(cleService(), $('#nServ').value.trim());
     sauverPanier();
     rendrePanier();
     allerA(4);
@@ -1275,7 +1199,7 @@
     $('#nCart').innerHTML = '<div class="cart-l">' + S.panier.map(function (l, k) {
       const c = cat(l.categorie);
       return '<div class="cart-i"><span class="cart-q" style="background:color-mix(in srgb,' + c.couleur + ' 12%,#fff);color:' + c.couleur + '">' + nombre(l.quantite) + '</span>' +
-        '<span class="cart-t"><b>' + esc(l.libelle) + '</b><small>' + esc(c.libelle) + ' · ' + esc(l.type_besoin) + ' · ' + esc(l.service) + '</small></span>' +
+        '<span class="cart-t"><b>' + esc(l.libelle) + '</b><small>' + esc(c.libelle) + ' · ' + esc(l.type_besoin) + (equipTxt(l) ? ' · ' + esc(equipTxt(l)) : '') + '</small></span>' +
         '<button type="button" class="cart-x" data-rm="' + k + '" title="Retirer du panier">' + ico('trash-2') + '</button></div>';
     }).join('') +
       '<div class="cart-tot"><span>' + S.panier.length + ' ligne(s)</span><span>Quantité totale : <b>' + nombre(somme(S.panier, function (l) { return l.quantite; })) + '</b></span></div></div>';
@@ -1325,7 +1249,7 @@
     if (!estBO()) return;
     // Responsable : les besoins qu'il a lui-même validés.
     // Manager : les besoins validés par les responsables et par les managers (dont lui-même).
-    const lignes = filtrer({ ignorerVue: true }).filter(function (b) {
+    const lignes = S.besoins.filter(function (b) {
       if (b.statut !== 'VALIDE') return false;
       return estManager() ? (b.traite_par_poste === 'Responsable' || b.traite_par_poste === 'Manager') : valideParMoi(b);
     }).sort(function (a, b) { return String(a.site).localeCompare(String(b.site)) || String(a.id).localeCompare(String(b.id)); });
@@ -1341,11 +1265,11 @@
         'N°': b.id, 'Réf. demande': b.ref, 'Saisi le': fDateHeure(b.cree_le), 'Site': b.site, 'Demandeur': b.demandeur, 'Poste': b.poste,
         'Catégorie': cat(b.categorie).libelle, 'Type besoin': b.type_besoin, 'Libellé': b.libelle,
         'Quantité demandée': Number(b.quantite) || 0, 'Caractéristiques': b.caracteristiques,
-        'Service bénéficiaire': b.service, 'Personne bénéficiaire': b.personne, 'Motif': b.motif, 'Commentaires': b.commentaires,
+        "Année d'acquisition équipement actuel": b.annee_acquisition, 'État équipement actuel': b.etat_actuel, 'Motif': b.motif,
         'Statut': (STATUTS[b.statut] || {}).libelle, 'Quantité validée': b.statut === 'VALIDE' ? Number(b.quantite_validee) || 0 : '',
         'Commentaire du valideur': b.commentaire_bo, 'Validé par': b.traite_par, 'Poste du valideur': b.traite_par_poste, 'Validé le': fDateHeure(b.maj_le),
       };
-    }), [14, 11, 16, 18, 20, 18, 13, 22, 30, 10, 30, 18, 20, 40, 30, 11, 10, 30, 18, 16]), 'Besoins validés');
+    }), [14, 11, 16, 18, 20, 18, 13, 22, 30, 10, 30, 16, 22, 40, 11, 10, 30, 18, 16, 16]), 'Besoins validés');
 
     const m = {};
     lignes.filter(function (b) { return b.statut !== 'REJETE'; }).forEach(function (b) {

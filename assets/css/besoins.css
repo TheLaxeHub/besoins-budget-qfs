@@ -102,3 +102,25 @@
 .n-who b{color:var(--heading)}
 @media (max-width:700px){.otp input{width:52px;height:58px}}
 .lg-conf{margin-bottom:18px}
+
+/* Choix du site : tous les sites visibles sans défilement */
+#lgGrid{max-height:none;overflow:visible;grid-template-columns:repeat(auto-fill,minmax(122px,1fr));gap:6px;padding:0}
+#lgGrid .lg-pdv{padding:7px 9px;font-size:12.5px;gap:0;justify-content:center;text-align:center;min-height:34px}
+#lgGrid .lg-pin{display:none}
+#lgSite .lg-h{margin-bottom:12px}
+#lgSite .lg-sbx{margin-bottom:10px}
+.lg-wrap{max-width:820px}
+@media (max-height:820px){.lg{padding:16px}.lg-head{margin-bottom:12px;gap:6px}.lg-logo{width:52px;height:52px}.lg-card{padding:20px 24px}}
+@media (max-width:700px){#lgGrid{grid-template-columns:repeat(3,minmax(0,1fr))}#lgGrid .lg-pdv{font-size:11.5px;padding:6px 4px}}
+
+/* Équipement actuel (remplacement / renouvellement) */
+.eq{margin-top:14px;padding:12px 14px 14px;border:1px solid var(--warning-subtle);background:var(--warning-soft);border-radius:var(--radius)}
+.eq .fl{margin-top:8px}
+.eq-t{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:var(--fg-warning)}
+.eq-t svg.lucide{width:15px;height:15px}
+.eq .in{background:#fff}
+
+/* 5 indicateurs (la case « Lignes de besoin » a été retirée) */
+.kg{grid-template-columns:repeat(5,minmax(0,1fr))}
+@media (max-width:1100px){.kg{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (max-width:700px){.kg{grid-template-columns:repeat(2,minmax(0,1fr))}}
