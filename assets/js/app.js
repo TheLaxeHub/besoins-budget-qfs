@@ -1,12 +1,11 @@
 /*
  * Expression des besoins — Budget 2027 : interface (connexion, tableau de bord,
- * saisie des besoins par les sites, validation par le Back Office).
+ * saisie des besoins par tous les postes, validation par les Responsables et les Managers).
  */
 (function () {
   'use strict';
   const C = window.APP_CONFIG;
   const Store = window.Store;
-  const BO = C.BACK_OFFICE;
 
   // Couleurs reprises du thème Flowbite d'iris.
   const STATUTS = {
@@ -19,7 +18,7 @@
   const AUTRE = '__autre__';
   const PAR_PAGE = 100;
   const CLE_SESSION = 'bud27_session';
-  const FILTRES_DEFAUT = { periode: 'tout', du: '', au: '', site: '', cat: '', type: '', statut: '', q: '', tri: 'recent' };
+  const FILTRES_DEFAUT = { vue: 'tout', periode: 'tout', du: '', au: '', site: '', cat: '', type: '', statut: '', q: '', tri: 'recent' };
 
   const S = {
     session: null,
@@ -54,7 +53,14 @@
   const fDateHeure = function (v) { const d = date(v); return d ? fDate(d) + ' ' + fHeure(d) : '—'; };
   const joursDepuis = function (v) { const d = date(v); return d ? (Date.now() - d) / 864e5 : 0; };
   const sansAccents = function (s) { return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); };
-  const estBO = function () { return S.session && S.session.isBO; };
+  // « Valideur » = Responsable ou Manager (la vue Back Office n'existe plus).
+  const estBO = function () { return !!S.session && (S.session.poste === 'Responsable' || S.session.poste === 'Manager'); };
+  const estManager = function () { return !!S.session && S.session.poste === 'Manager'; };
+  const peutDecider = function (b) { return !!S.session && Store.peutDecider(S.session, b); };
+  const estMien = function (b) { return !!S.session && Store.estMien(S.session, b); };
+  const valideParMoi = function (b) { return !!S.session && b.traite_par_id === S.session.id && !!S.session.id; };
+  const cleUser = function () { return (S.session.id || (S.session.site + '_' + S.session.nom)).toLowerCase(); };
+  const initiales = function (n) { return String(n).split(/\s+/).filter(Boolean).slice(0, 2).map(function (x) { return x.charAt(0).toUpperCase(); }).join(''); };
   const parId = function (id) { return S.besoins.find(function (b) { return b.id === id; }); };
   const cat = function (code) { return CATS.find(function (c) { return c.code === code; }) || { code: code, libelle: code, ico: 'package', couleur: '#6b7280', articles: [] }; };
   const qteRetenue = function (b) { return b.statut === 'VALIDE' ? Number(b.quantite_validee) || 0 : b.statut === 'REJETE' ? 0 : Number(b.quantite) || 0; };
@@ -88,20 +94,36 @@
     ecrire: function (k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* mode privé */ } },
     effacer: function (k) { try { localStorage.removeItem(k); } catch (e) { /* mode privé */ } },
   };
-  const clePanier = function () { return 'bud27_panier_' + S.session.profil; };
-  const cleNom = function () { return 'bud27_nom_' + S.session.profil; };
-  const cleService = function () { return 'bud27_service_' + S.session.profil; };
+  const clePanier = function () { return 'bud27_panier_' + cleUser(); };
+  const cleService = function () { return 'bud27_service_' + cleUser(); };
+  const typesDe = function (code) { return cat(code).types || C.TYPES_BESOIN; };
 
-  /* ================= Connexion ================= */
+  /* ================= Connexion : poste → site → accès ================= */
 
-  let profilChoisi = null;
+  const L = { etape: 1, poste: null, site: '', nom: '', annuaire: null, minuteur: null, expire: 0 };
+  const posteDef = function (lib) { return C.POSTES.find(function (p) { return p.libelle === lib; }); };
 
   function initConnexion() {
     $$('[data-cfg]').forEach(function (el) { el.textContent = C[el.dataset.cfg] || ''; });
     document.title = C.APP_TITRE + ' — QFS';
     $('#lgDemo').hidden = !Store.demo;
+    const carte = function (p) {
+      return '<button type="button" class="lg-role" data-poste="' + esc(p.libelle) + '">' + ico(p.ico || 'user') +
+        '<b>' + esc(p.libelle) + '</b><small>' + esc(p.aide || '') + '</small></button>';
+    };
+    $('#lgRolesSite').innerHTML = C.POSTES.filter(function (p) { return !p.siege; }).map(carte).join('');
+    $('#lgRolesSiege').innerHTML = C.POSTES.filter(function (p) { return p.siege; }).map(carte).join('');
     dessinerGrille('');
     icones();
+
+    $('#lgPoste').addEventListener('click', function (e) {
+      const b = e.target.closest('[data-poste]');
+      if (!b) return;
+      L.poste = posteDef(b.dataset.poste);
+      L.site = L.poste.siege ? C.SITE_SIEGE : '';
+      etapeConnexion(2);
+    });
+    $('#lgSiegeOk').addEventListener('click', function () { L.site = C.SITE_SIEGE; etapeConnexion(3); });
     $('#lgSearch').addEventListener('input', function (e) { dessinerGrille(e.target.value); });
     $('#lgSearch').addEventListener('keydown', function (e) {
       if (e.key !== 'Enter') return;
@@ -110,14 +132,41 @@
     });
     $('#lgGrid').addEventListener('click', function (e) {
       const b = e.target.closest('[data-site]');
-      if (b) choisirProfil(b.dataset.site);
+      if (!b) return;
+      L.site = b.dataset.site;
+      etapeConnexion(3);
     });
-    $('#lgBo').addEventListener('click', function () { choisirProfil(BO); });
-    $('#lgBack').addEventListener('click', function () { etapeConnexion(1); });
-    $('#lgStep2').addEventListener('submit', function (e) {
-      e.preventDefault();
-      connecter(profilChoisi, $('#lgCode').value.trim());
+    $$('#login [data-back]').forEach(function (b) {
+      b.addEventListener('click', function () { arreterMinuteur(); etapeConnexion(Number(b.dataset.back)); });
     });
+    $('#lgNomForm').addEventListener('submit', function (e) { e.preventDefault(); connexionSite(); });
+    $('#lgPeople').addEventListener('click', function (e) {
+      const b = e.target.closest('[data-nom]');
+      if (!b) return;
+      L.nom = b.dataset.nom;
+      demanderCode();
+    });
+    const cases = $$('#otpBox input');
+    cases.forEach(function (inp, k) {
+      inp.addEventListener('input', function () {
+        inp.value = inp.value.replace(/\D/g, '').slice(-1);
+        $('#otpBox').classList.remove('err');
+        if (inp.value && k < 3) cases[k + 1].focus();
+        if (cases.every(function (c) { return c.value; })) verifierCode();
+      });
+      inp.addEventListener('keydown', function (e) {
+        if (e.key === 'Backspace' && !inp.value && k > 0) cases[k - 1].focus();
+      });
+      inp.addEventListener('paste', function (e) {
+        const t = (e.clipboardData || window.clipboardData).getData('text').replace(/\D/g, '').slice(0, 4);
+        if (t.length < 2) return;
+        e.preventDefault();
+        cases.forEach(function (c, i) { c.value = t[i] || ''; });
+        if (t.length === 4) verifierCode(); else cases[t.length].focus();
+      });
+    });
+    $('#lgOtp').addEventListener('submit', function (e) { e.preventDefault(); verifierCode(); });
+    $('#otpRenvoi').addEventListener('click', function () { demanderCode(); });
   }
 
   function dessinerGrille(q) {
@@ -125,43 +174,142 @@
     const sites = C.SITES.filter(function (p) { return !n || sansAccents(p).includes(n); });
     $('#lgGrid').innerHTML = sites.length
       ? sites.map(function (p) {
-        const court = nomCourt(p);
-        return '<button type="button" class="lg-pdv" data-site="' + esc(p) + '"><span class="lg-pin">' + esc(court.charAt(0)) + '</span>' + esc(p) + '</button>';
+        return '<button type="button" class="lg-pdv" data-site="' + esc(p) + '"><span class="lg-pin">' + esc(p.charAt(0)) + '</span>' + esc(p) + '</button>';
       }).join('')
       : '<div class="lg-none">Aucun site ne correspond.</div>';
   }
 
-  function etapeConnexion(n) {
-    $('#lgStep1').hidden = n !== 1;
-    $('#lgStep2').hidden = n !== 2;
+  async function etapeConnexion(n) {
+    L.etape = n;
     $('#lgErr').textContent = '';
+    $('#lgPoste').hidden = n !== 1;
+    $('#lgSite').hidden = n !== 2;
+    $('#lgQui').hidden = n !== 3;
+    $('#lgOtp').hidden = n !== 4;
+    $$('#lgSteps li').forEach(function (li) {
+      const k = Number(li.dataset.s);
+      li.classList.toggle('on', k === Math.min(n, 3));
+      li.classList.toggle('ok', k < Math.min(n, 3));
+    });
     if (n === 2) {
-      $('#lgWho').textContent = profilChoisi === BO ? 'Back Office' : profilChoisi;
-      $('#lgCode').value = '';
-      setTimeout(function () { $('#lgCode').focus(); }, 50);
+      const siege = L.poste.siege;
+      $('#lgSiteH').textContent = siege
+        ? 'Poste ' + L.poste.libelle + ' : votre site est le ' + C.SITE_SIEGE + '.'
+        : 'Poste ' + L.poste.libelle + ' : sélectionnez votre site.';
+      $('#lgSiteSiege').hidden = !siege;
+      $('#lgSiteListe').hidden = siege;
+      if (!siege) { $('#lgSearch').value = ''; dessinerGrille(''); setTimeout(function () { $('#lgSearch').focus(); }, 50); }
+    }
+    if (n === 3) {
+      const siege = L.poste.siege;
+      $('#lgQuiH').textContent = L.poste.libelle + ' · ' + L.site + (siege ? ' — choisissez votre nom : un code de connexion vous sera envoyé par e-mail.' : '');
+      $('#lgNomForm').hidden = siege;
+      $('#lgPeople').hidden = !siege;
+      if (siege) await dessinerPersonnes();
+      else setTimeout(function () { $('#lgNom').focus(); }, 50);
+    }
+    icones();
+  }
+
+  async function dessinerPersonnes() {
+    const box = $('#lgPeople');
+    if (!L.annuaire) {
+      box.innerHTML = '<div class="lg-none">Chargement…</div>';
+      try {
+        L.annuaire = (await Store.annuaire()).personnes || [];
+      } catch (e) {
+        box.innerHTML = '';
+        $('#lgErr').textContent = e.message;
+        return;
+      }
+    }
+    const liste = L.annuaire.filter(function (p) { return p.poste === L.poste.libelle; });
+    box.innerHTML = liste.length ? liste.map(function (p) {
+      return '<button type="button" class="lg-pdv" data-nom="' + esc(p.nom) + '"><span class="lg-pin">' + esc(p.nom.charAt(0)) + '</span><span>' + esc(p.nom) + '<small>' + esc(p.email) + '</small></span></button>';
+    }).join('') : '<div class="lg-none">Aucune personne enregistrée pour ce poste.</div>';
+  }
+
+  async function connexionSite() {
+    const nom = $('#lgNom').value.trim();
+    if (nom.length < 2) { $('#lgNom').classList.add('err'); $('#lgErr').textContent = 'Indiquez votre nom et prénom.'; return; }
+    $('#lgNom').classList.remove('err');
+    chargement(true);
+    try {
+      const r = await Store.connexionSite({ poste: L.poste.libelle, site: L.site, nom: nom });
+      demarrerSession(Object.assign({ token: r.token }, r.session));
+    } catch (e) {
+      $('#lgErr').textContent = e.message;
+    } finally {
+      chargement(false);
     }
   }
 
-  function choisirProfil(profil) {
-    profilChoisi = profil;
-    connecter(profil, '');
-  }
-
-  async function connecter(profil, code, silencieux) {
+  async function demanderCode() {
     chargement(true);
     $('#lgErr').textContent = '';
     try {
-      const r = await Store.login({ profil: profil, code: code });
-      demarrerSession({ profil: r.profil || profil, code: code, isBO: (r.profil || profil) === BO });
-    } catch (err) {
-      if (silencieux) { afficherConnexion(); return; }
-      if (err.code === 'CODE_REQUIS') {
-        etapeConnexion(2);
-      } else {
-        if (err.code === 'CODE_INVALIDE') etapeConnexion(2);
-        $('#lgErr').textContent = err.message;
-      }
+      const r = await Store.envoyerCode({ poste: L.poste.libelle, nom: L.nom });
+      if (L.etape !== 4) etapeConnexion(4);
+      $('#lgOtpWho').textContent = L.nom;
+      $('#lgOtpH').innerHTML = 'Un code à 4 chiffres vient d\'être envoyé à <b>' + esc(r.email) + '</b>. Saisissez-le ci-dessous.';
+      $('#otpDemo').hidden = !r.demoCode;
+      if (r.demoCode) $('#otpDemo').innerHTML = 'Mode démonstration — votre code est <b>' + esc(r.demoCode) + '</b>';
+      $$('#otpBox input').forEach(function (c) { c.value = ''; c.disabled = false; });
+      $('#otpBox').classList.remove('err');
+      $('#otpGo').disabled = false;
+      demarrerMinuteur(r.expire || (Date.now() + C.OTP_MINUTES * 60000));
+      setTimeout(function () { $('#otpBox input').focus(); }, 50);
+    } catch (e) {
+      if (L.etape !== 4) etapeConnexion(L.etape);
+      $('#lgErr').textContent = e.message;
     } finally {
+      chargement(false);
+    }
+  }
+
+  function demarrerMinuteur(expire) {
+    arreterMinuteur();
+    L.expire = expire;
+    const tic = function () {
+      const reste = Math.max(0, Math.round((L.expire - Date.now()) / 1000));
+      const t = $('#otpTimer');
+      if (reste <= 0) {
+        arreterMinuteur();
+        t.className = 'otp-t exp';
+        t.textContent = 'Code expiré. Générez un nouveau code pour continuer.';
+        $$('#otpBox input').forEach(function (c) { c.value = ''; c.disabled = true; });
+        $('#otpGo').disabled = true;
+        $('#otpDemo').hidden = true;
+        return;
+      }
+      t.className = 'otp-t';
+      t.innerHTML = 'Code valable encore <b>' + Math.floor(reste / 60) + ':' + p2(reste % 60) + '</b>';
+    };
+    tic();
+    L.minuteur = setInterval(tic, 1000);
+  }
+  function arreterMinuteur() { clearInterval(L.minuteur); L.minuteur = null; }
+
+  let verifEnCours = false;
+  async function verifierCode() {
+    if (verifEnCours) return;
+    const code = $$('#otpBox input').map(function (c) { return c.value; }).join('');
+    if (code.length !== 4) { $('#lgErr').textContent = 'Saisissez les 4 chiffres du code.'; return; }
+    if (Date.now() > L.expire) { $('#lgErr').textContent = 'Code expiré. Générez un nouveau code.'; return; }
+    verifEnCours = true;
+    chargement(true);
+    $('#lgErr').textContent = '';
+    try {
+      const r = await Store.verifierCode({ poste: L.poste.libelle, nom: L.nom, code: code });
+      arreterMinuteur();
+      demarrerSession(Object.assign({ token: r.token }, r.session));
+    } catch (e) {
+      $('#lgErr').textContent = e.message;
+      $('#otpBox').classList.add('err');
+      $$('#otpBox input').forEach(function (c) { c.value = ''; });
+      if (e.code === 'CODE_EXPIRE') { L.expire = 0; } else { $('#otpBox input').focus(); }
+    } finally {
+      verifEnCours = false;
       chargement(false);
     }
   }
@@ -170,16 +318,17 @@
     $('#app').hidden = true;
     $('#login').hidden = false;
     document.body.className = '';
+    arreterMinuteur();
+    L.poste = null; L.site = ''; L.nom = '';
     etapeConnexion(1);
-    $('#lgSearch').value = '';
-    dessinerGrille('');
   }
 
   function demarrerSession(sess) {
     S.session = sess;
-    memoire.ecrire(CLE_SESSION, { profil: sess.profil, code: sess.code });
-    document.body.className = sess.isBO ? 'is-bo' : 'is-pdv';
-    S.panier = sess.isBO ? [] : (memoire.lire(clePanier()) || []);
+    memoire.ecrire(CLE_SESSION, sess);
+    document.body.className = estBO() ? 'is-bo' : 'is-pdv';
+    S.filtres = Object.assign({}, FILTRES_DEFAUT, { vue: estBO() ? 'a_valider' : 'tout' });
+    S.panier = memoire.lire(clePanier()) || [];
     $('#login').hidden = true;
     $('#app').hidden = false;
     initApp();
@@ -195,6 +344,7 @@
   function deconnecter(message) {
     clearInterval(S.minuteur);
     fermerSaisie();
+    if (S.session && !message) Store.deconnexion(S.session).catch(function () { /* déjà expirée */ });
     memoire.effacer(CLE_SESSION);
     fermerPanneau();
     S.session = null;
@@ -212,15 +362,20 @@
 
   function initApp() {
     const bo = estBO();
-    $('#sbAv').textContent = bo ? 'BO' : nomCourt(S.session.profil).charAt(0);
+    const ss = S.session;
+    const caisse = !(posteDef(ss.poste) || {}).siege;
+    $('#sbAv').textContent = initiales(ss.nom);
     $('#sbAv').className = 'sb-av' + (bo ? ' bo' : '');
-    $('#sbName').textContent = bo ? 'Back Office' : S.session.profil;
-    $('#sbRole').textContent = bo ? 'Validation des ' + C.SITES.length + ' sites' : 'Site de déploiement';
-    $('#sbReg').textContent = bo ? 'Registre des besoins' : 'Mes besoins';
-    $('#bcWho').textContent = bo ? 'Back Office' : S.session.profil;
-    $('#pgIco').innerHTML = ico(bo ? 'shield-check' : 'building-2');
-    $('#pgEyebrow').textContent = bo ? 'E-Money · Back Office' : 'E-Money · Site ' + S.session.profil;
-    $('#regTitle').textContent = bo ? 'Registre des besoins — tous les sites' : 'Mes besoins';
+    $('#sbName').textContent = ss.nom;
+    $('#sbRole').textContent = ss.poste + ' · ' + ss.site;
+    $('#sbReg').textContent = bo ? 'Besoins à valider' : caisse ? 'Besoins du site' : 'Mes besoins';
+    $('#bcWho').textContent = ss.nom + ' · ' + ss.poste;
+    $('#pgIco').innerHTML = ico((posteDef(ss.poste) || {}).ico || 'user');
+    $('#pgEyebrow').textContent = 'E-Money · ' + ss.poste + ' · ' + ss.site;
+    $('#regTitle').textContent = bo
+      ? (estManager() ? 'Besoins — validation des responsables et des managers' : 'Besoins — validation des caissières, chefs, opérateurs et assistants')
+      : caisse ? 'Besoins des caissières — ' + ss.site : 'Mes besoins';
+    $('#fVue').value = S.filtres.vue;
     $('#ftText').textContent = 'Quipux Financial Services — ' + C.APP_TITRE + ' · ' + new Date().getFullYear();
     $('#tbDemo').hidden = !Store.demo;
     rendreDateLimite();
@@ -239,6 +394,7 @@
     appInitialisee = true;
 
     const surFiltre = function () { S.limite = PAR_PAGE; rendre(); };
+    $('#fVue').addEventListener('change', function (e) { S.filtres.vue = e.target.value; S.selection = {}; surFiltre(); });
     $('#fPeriode').addEventListener('change', function (e) {
       S.filtres.periode = e.target.value;
       $('#fDates').hidden = e.target.value !== 'perso';
@@ -250,7 +406,7 @@
     $('#fCat').addEventListener('change', function (e) { S.filtres.cat = e.target.value; surFiltre(); });
     $('#fType').addEventListener('change', function (e) { S.filtres.type = e.target.value; surFiltre(); });
     $('#fReset').addEventListener('click', function () {
-      S.filtres = Object.assign({}, FILTRES_DEFAUT);
+      S.filtres = Object.assign({}, FILTRES_DEFAUT, { vue: estBO() ? 'a_valider' : 'tout' });
       synchroniserFiltres();
       surFiltre();
     });
@@ -285,7 +441,7 @@
     $('#ckAll').addEventListener('change', function (e) {
       const coche = e.target.checked;
       S.lignesTable.slice(0, S.limite).forEach(function (b) {
-        if (b.statut !== 'EN_ATTENTE') return;
+        if (b.statut !== 'EN_ATTENTE' || !peutDecider(b)) return;
         if (coche) S.selection[b.id] = true; else delete S.selection[b.id];
       });
       rendreTable(filtrer());
@@ -348,17 +504,18 @@
   function rendreDateLimite() {
     const b = $('#dlBanner');
     const d = C.DATE_LIMITE ? new Date(C.DATE_LIMITE + 'T23:59:59') : null;
-    if (!d || isNaN(d) || estBO()) { b.hidden = true; return; }
+    if (!d || isNaN(d)) { b.hidden = true; return; }
     const j = Math.ceil((d - Date.now()) / 864e5);
     b.hidden = false;
-    b.className = 'dl-banner pdv-only' + (j < 0 ? ' late' : '');
+    b.className = 'dl-banner' + (j < 0 ? ' late' : '');
     b.innerHTML = ico(j < 0 ? 'alarm-clock-off' : 'calendar-clock') + '<span>' + (j < 0
-      ? 'La date limite de saisie (' + fDate(d) + ') est dépassée. Contactez le Back Office pour tout besoin urgent.'
+      ? 'La date limite de saisie (' + fDate(d) + ') est dépassée. Contactez votre responsable pour tout besoin urgent.'
       : 'Date limite de saisie des besoins ' + esc(C.CAMPAGNE) + ' : <b>' + fDate(d) + '</b> — ' + (j === 0 ? "c'est aujourd'hui" : 'encore ' + j + ' jour(s)') + '.') + '</span>';
   }
 
   function synchroniserFiltres() {
     const f = S.filtres;
+    $('#fVue').value = f.vue;
     $('#fPeriode').value = f.periode;
     $('#fDates').hidden = f.periode !== 'perso';
     $('#fDu').value = f.du;
@@ -378,12 +535,12 @@
       S.synchro = new Date();
       Object.keys(S.selection).forEach(function (id) {
         const b = parId(id);
-        if (!b || b.statut !== 'EN_ATTENTE') delete S.selection[id];
+        if (!b || b.statut !== 'EN_ATTENTE' || !peutDecider(b)) delete S.selection[id];
       });
       rendre();
       if (S.ouvert && S.ouvert !== '__groupe__') rendrePanneau();
     } catch (err) {
-      if (err.code === 'CODE_INVALIDE' || err.code === 'CODE_REQUIS' || err.code === 'PROFIL_INCONNU') {
+      if (err.code === 'SESSION_EXPIREE') {
         deconnecter('Session expirée : ' + err.message);
       } else if (!silencieux) {
         toast(err.message, 'err');
@@ -425,6 +582,11 @@
       if (b[0] && (!d || d < b[0])) return false;
       if (b[1] && (!d || d > b[1])) return false;
       if (!o.ignorerSite && f.site && x.site !== f.site) return false;
+      if (estBO() && !o.ignorerVue) {
+        if (f.vue === 'a_valider' && !peutDecider(x)) return false;
+        if (f.vue === 'valides_moi' && !(x.statut === 'VALIDE' && valideParMoi(x))) return false;
+        if (f.vue === 'mes' && !estMien(x)) return false;
+      }
       if (f.cat && x.categorie !== f.cat) return false;
       if (f.type && x.type_besoin !== f.type) return false;
       return true;
@@ -478,7 +640,7 @@
       return '<span class="sli"><span class="sd" style="background:' + STATUTS[k].couleur + '"></span>' + STATUTS[k].pluriel + ' : <b>' + st[k] + '</b></span>';
     }).join('');
     $('#psum').textContent = st.n
-      ? st.traites + ' ligne(s) examinée(s) par le Back Office sur ' + st.n + ' — ' + st.EN_ATTENTE + ' encore en attente (' + nombre(st.qteAttente) + ' unité(s)).'
+      ? st.traites + ' ligne(s) examinée(s) sur ' + st.n + ' — ' + st.EN_ATTENTE + ' encore en attente (' + nombre(st.qteAttente) + ' unité(s)).'
       : 'Aucun besoin exprimé sur la période sélectionnée.';
   }
 
@@ -488,13 +650,13 @@
         '<p class="kv">' + val + '</p><p class="ku">' + unite + '</p></div>';
     };
     const parCat = CATS.map(function (c) { return c.libelle + ' ' + nombre(somme(filtrer().filter(function (b) { return b.categorie === c.code; }), function (b) { return b.quantite; })); }).join(' · ');
-    const nbSites = estBO() ? (S.filtres.site ? 1 : C.SITES.length) : 1;
+    const aValider = S.besoins.filter(function (b) { return b.statut === 'EN_ATTENTE' && peutDecider(b); });
     $('#kpis').innerHTML = [
-      k('clipboard-list', estBO() ? 'Lignes de besoin' : 'Mes lignes de besoin', nombre(st.n), 'sur la période', '#1d4ed8'),
+      k('clipboard-list', 'Lignes de besoin', nombre(st.n), estBO() ? 'selon l\'affichage choisi' : 'sur la période', '#1d4ed8'),
       k('package', 'Quantité demandée', nombre(st.qte), parCat, '#111827'),
       estBO()
-        ? k('building-2', 'Sites ayant saisi', st.sites + ' / ' + nbSites, nbSites - st.sites > 0 ? (nbSites - st.sites) + ' site(s) sans saisie' : 'tous les sites ont saisi', '#9333ea')
-        : k('shopping-cart', 'Panier non envoyé', nombre(S.panier.length), S.panier.length ? 'ligne(s) à envoyer au Back Office' : 'rien en attente d\'envoi', '#9333ea'),
+        ? k('stamp', 'À valider par vous', nombre(aValider.length), aValider.length ? nombre(somme(aValider, function (b) { return b.quantite; })) + ' unité(s) en attente de votre décision' : 'rien en attente', '#9333ea')
+        : k('shopping-cart', 'Panier non envoyé', nombre(S.panier.length), S.panier.length ? 'ligne(s) à envoyer pour validation' : 'rien en attente d\'envoi', '#9333ea'),
       k('hourglass', 'En attente de validation', nombre(st.EN_ATTENTE), nombre(st.qteAttente) + ' unité(s) concernée(s)', '#ea580c'),
       k('circle-check', 'Lignes validées', nombre(st.VALIDE), nombre(st.qteValidee) + ' unité(s) validée(s)', '#047857'),
       k('circle-x', 'Lignes rejetées', nombre(st.REJETE), st.traites ? st.tauxValid + '% de validation des lignes examinées' : 'aucune décision pour le moment', '#be123c'),
@@ -601,7 +763,7 @@
     const q = sansAccents(f.q).trim();
     if (q) {
       lignes = lignes.filter(function (b) {
-        return sansAccents([b.id, b.ref, b.site, b.libelle, b.caracteristiques, b.service, b.personne, b.motif, b.demandeur, b.type_besoin].join(' ')).includes(q);
+        return sansAccents([b.id, b.ref, b.site, b.libelle, b.caracteristiques, b.service, b.personne, b.motif, b.demandeur, b.poste, b.type_besoin].join(' ')).includes(q);
       });
     }
     const comptes = {};
@@ -626,10 +788,10 @@
       const sel = !!S.selection[b.id];
       const vieux = b.statut === 'EN_ATTENTE' && joursDepuis(b.cree_le) >= C.SEUIL_ATTENTE_JOURS;
       return '<tr data-id="' + esc(b.id) + '" class="' + (sel ? 'sel ' : '') + (vieux ? 'late' : '') + '">' +
-        (bo ? '<td class="ck">' + (b.statut === 'EN_ATTENTE' ? '<input type="checkbox" data-ck="' + esc(b.id) + '"' + (sel ? ' checked' : '') + ' aria-label="Sélectionner">' : '') + '</td>' : '') +
+        (bo ? '<td class="ck">' + (b.statut === 'EN_ATTENTE' && peutDecider(b) ? '<input type="checkbox" data-ck="' + esc(b.id) + '"' + (sel ? ' checked' : '') + ' aria-label="Sélectionner">' : '') + '</td>' : '') +
         '<td class="nw"><b>' + esc(b.id) + '</b></td>' +
         '<td class="nw">' + fDate(b.cree_le) + '<div class="sub">' + fHeure(b.cree_le) + '</div></td>' +
-        (bo ? '<td class="nw"><b>' + esc(b.site) + '</b></td>' : '') +
+        (bo ? '<td class="nw"><b>' + esc(b.site) + '</b><div class="sub">' + esc(b.demandeur) + (b.poste ? ' · ' + esc(b.poste) : '') + '</div></td>' : '') +
         '<td>' + badgeCat(b.categorie) + '</td>' +
         '<td><b>' + esc(b.libelle) + '</b>' + (b.caracteristiques ? '<div class="sub clip" title="' + esc(b.caracteristiques) + '">' + esc(b.caracteristiques) + '</div>' : '') + '</td>' +
         '<td class="num"><span class="ib">' + nombre(b.quantite) + '</span></td>' +
@@ -645,7 +807,7 @@
     $('#more').hidden = lignes.length <= S.limite;
     $('#rc').textContent = lignes.length + ' ligne(s) — ' + nombre(somme(lignes, function (b) { return b.quantite; })) + ' unité(s)';
     if (bo) {
-      const attente = visibles.filter(function (b) { return b.statut === 'EN_ATTENTE'; });
+      const attente = visibles.filter(function (b) { return b.statut === 'EN_ATTENTE' && peutDecider(b); });
       $('#ckAll').checked = attente.length > 0 && attente.every(function (b) { return S.selection[b.id]; });
       $('#ckAll').disabled = !attente.length;
       majSelection();
@@ -740,13 +902,19 @@
 
     if (estBO()) {
       const actifsSites = {};
-      filtrer({ ignorerSite: true }).forEach(function (b) { actifsSites[b.site] = 1; });
+      filtrer({ ignorerSite: true, ignorerVue: true }).forEach(function (b) { actifsSites[b.site] = 1; });
       const vides = C.SITES.filter(function (p) { return !actifsSites[p]; });
-      const vieux = attente.filter(function (b) { return joursDepuis(b.cree_le) >= C.SEUIL_ATTENTE_JOURS; });
+      const mesAttente = S.besoins.filter(function (b) { return b.statut === 'EN_ATTENTE' && peutDecider(b); })
+        .sort(function (a, b) { return String(a.cree_le).localeCompare(String(b.cree_le)); });
+      const vieux = mesAttente.filter(function (b) { return joursDepuis(b.cree_le) >= C.SEUIL_ATTENTE_JOURS; });
       $('#alerts').innerHTML = [
-        bloc('crit', 'building-2', 'Sites sans aucune saisie', vides.length + ' site(s) sur ' + C.SITES.length + ' — à relancer',
-          vides.slice(0, 8).map(function (p) { return '<div class="acard" data-site-vide="' + esc(p) + '"><div class="anm">' + esc(p) + '</div></div>'; }),
-          'Tous les sites ont exprimé leurs besoins.', vides.length),
+        estManager()
+          ? bloc('crit', 'stamp', 'À valider par vous', mesAttente.length + ' ligne(s) des responsables et managers',
+            mesAttente.slice(0, MAX).map(function (b) { return carte(b, esc(b.demandeur) + ' · ' + esc(b.poste) + ' — saisi le ' + fDate(b.cree_le)); }),
+            'Aucune ligne en attente de votre décision.', mesAttente.length)
+          : bloc('crit', 'building-2', 'Sites sans aucune saisie', vides.length + ' site(s) sur ' + C.SITES.length + ' — à relancer',
+            vides.slice(0, 8).map(function (p) { return '<div class="acard" data-site-vide="' + esc(p) + '"><div class="anm">' + esc(p) + '</div></div>'; }),
+            'Tous les sites ont exprimé leurs besoins.', vides.length),
         bloc('urg', 'hourglass', 'En attente depuis plus de ' + C.SEUIL_ATTENTE_JOURS + ' jours', vieux.length + ' ligne(s) à examiner en priorité',
           vieux.slice(0, MAX).map(function (b) { return carte(b, 'Saisi le ' + fDate(b.cree_le) + ' — ' + Math.floor(joursDepuis(b.cree_le)) + ' j d\'attente'); }),
           'Aucune ligne en attente prolongée.', vieux.length),
@@ -756,11 +924,11 @@
       const rejets = liste.filter(function (b) { return b.statut === 'REJETE'; })
         .sort(function (a, b) { return String(b.maj_le).localeCompare(String(a.maj_le)); });
       $('#alerts').innerHTML = [
-        bloc('crit', 'circle-x', 'Besoins rejetés', 'Motif du Back Office — ressaisissez si besoin',
+        bloc('crit', 'circle-x', 'Besoins rejetés', 'Motif du valideur — ressaisissez si besoin',
           rejets.slice(0, MAX).map(function (b) { return carte(b, esc(b.commentaire_bo || 'Sans commentaire')); }),
           'Aucun besoin rejeté.', rejets.length),
         bloc('urg', 'hourglass', 'En attente de validation', attente.length + ' ligne(s) en cours d\'examen',
-          attente.slice(0, MAX).map(function (b) { return carte(b, 'Saisi le ' + fDate(b.cree_le) + (b.demandeur ? ' par ' + esc(b.demandeur) : '')); }),
+          attente.slice(0, MAX).map(function (b) { return carte(b, 'Saisi le ' + fDate(b.cree_le) + (b.demandeur ? ' par ' + esc(b.demandeur) + (b.poste ? ' (' + esc(b.poste) + ')' : '') : '')); }),
           'Aucun besoin en attente.', attente.length),
         blocDecisions,
       ].join('');
@@ -803,24 +971,27 @@
         it('Caractéristiques', esc(b.caracteristiques), true) +
       '</div></div>' +
       '<div class="ps"><h3 class="pst">Bénéficiaire et justification</h3><div class="pg">' +
-        it('Site', esc(b.site)) + it('Demandeur', esc(b.demandeur)) +
+        it('Site', esc(b.site)) + it('Demandeur', esc(b.demandeur) + (b.poste ? '<div class="sub" style="font-weight:500;color:#6b7280">' + esc(b.poste) + '</div>' : '')) +
         it('Service bénéficiaire', esc(b.service)) + it('Personne bénéficiaire', esc(b.personne)) +
       '</div><p class="pil" style="margin:12px 0 6px">Motif</p><div class="ptx">' + esc(b.motif) + '</div>' +
       (b.commentaires ? '<p class="pil" style="margin:12px 0 6px">Commentaires</p><div class="ptx">' + esc(b.commentaires) + '</div>' : '') + '</div>' +
       (b.statut !== 'EN_ATTENTE'
-        ? '<div class="ps"><h3 class="pst">Décision du Back Office</h3><div class="pg">' +
+        ? '<div class="ps"><h3 class="pst">Décision</h3><div class="pg">' +
           it('Décision', badgeStatut(b.statut)) + it('Quantité validée', b.statut === 'VALIDE' ? '<b>' + nombre(b.quantite_validee) + '</b>' : '') +
-          it('Par', esc(b.traite_par)) + it('Le', fDateHeure(b.maj_le)) +
+          it('Par', esc(b.traite_par) + (b.traite_par_poste ? ' <span class="z">(' + esc(b.traite_par_poste) + ')</span>' : '')) + it('Le', fDateHeure(b.maj_le)) +
           (b.commentaire_bo ? it('Commentaire', esc(b.commentaire_bo), true) : '') + '</div></div>'
         : '');
 
-    if (estBO()) {
+    const valideur = C.VALIDATION[b.poste];
+    if (peutDecider(b)) {
       $('#pForm').innerHTML = formDecision(b.statut === 'EN_ATTENTE' ? 'VALIDE' : b.statut, b.quantite_validee !== '' ? b.quantite_validee : b.quantite, b.commentaire_bo, true);
       brancherDecision([b.id]);
-    } else if (b.statut === 'EN_ATTENTE') {
-      $('#pForm').innerHTML = '<div class="ps"><h3 class="pst">Modifier</h3><p class="cs" style="margin-bottom:10px">Ce besoin n\'a pas encore été examiné : vous pouvez le retirer puis le ressaisir si nécessaire.</p>' +
+    } else if (b.statut === 'EN_ATTENTE' && estMien(b)) {
+      $('#pForm').innerHTML = '<div class="ps"><h3 class="pst">Modifier</h3><p class="cs" style="margin-bottom:6px">Validation : ' + esc(valideur ? valideur + 's' : '—') + '.</p><p class="cs" style="margin-bottom:10px">Ce besoin n\'a pas encore été examiné : vous pouvez le retirer puis le ressaisir si nécessaire.</p>' +
         '<button type="button" class="btn btn-danger" id="pRetirer">' + ico('trash-2') + 'Retirer ce besoin</button></div>';
       $('#pRetirer').addEventListener('click', function () { retirer(b); });
+    } else if (b.statut === 'EN_ATTENTE') {
+      $('#pForm').innerHTML = '<div class="ps"><p class="cs">En attente de validation par les ' + esc(valideur ? valideur.toLowerCase() + 's' : 'valideurs') + '.</p></div>';
     } else {
       $('#pForm').innerHTML = '';
     }
@@ -828,7 +999,6 @@
   }
 
   function formDecision(statut, qte, commentaire, unitaire) {
-    const agent = memoire.lire('bud27_agent') || '';
     return '<form class="ps" id="decForm" novalidate><h3 class="pst">' + (unitaire ? 'Décision' : 'Décision groupée') + '</h3>' +
       '<div class="dec">' +
         '<label class="d-ok"><input type="radio" name="dst" value="VALIDE"' + (statut === 'VALIDE' ? ' checked' : '') + '><span>' + ico('check') + 'Valider</span></label>' +
@@ -838,7 +1008,7 @@
       (unitaire ? '<div id="decQteW"><label class="fl" for="decQte">Quantité validée</label><input class="in" id="decQte" type="number" min="0" step="1" value="' + esc(qte) + '" style="max-width:160px"></div>'
         : '<p class="cs" style="margin-top:10px">En validation groupée, la quantité validée est égale à la quantité demandée de chaque ligne.</p>') +
       '<label class="fl" for="decCom">Commentaire <span id="decComReq" class="z"></span></label><textarea class="in" id="decCom" rows="3" placeholder="Ex. : validé pour le budget 2027, à livrer au T1…">' + esc(commentaire || '') + '</textarea>' +
-      '<label class="fl" for="decAgent">Votre nom (agent Back Office) *</label><input class="in" id="decAgent" value="' + esc(agent) + '" autocomplete="name">' +
+      '<p class="cs" style="margin-top:10px">Décision enregistrée au nom de <b>' + esc(S.session.nom) + '</b> (' + esc(S.session.poste) + ').</p>' +
       '<div class="lg-err" id="decErr"></div>' +
       '<div class="pf-ft"><button type="submit" class="btn bp">' + ico('save') + 'Enregistrer la décision</button></div></form>';
   }
@@ -855,19 +1025,16 @@
       e.preventDefault();
       const statut = ($('#decForm input[name=dst]:checked') || {}).value;
       const com = $('#decCom').value.trim();
-      const agent = $('#decAgent').value.trim();
       const err = $('#decErr');
       err.textContent = '';
       if (!statut) { err.textContent = 'Choisissez une décision.'; return; }
       if (statut === 'REJETE' && !com) { err.textContent = 'Indiquez le motif du rejet.'; $('#decCom').focus(); return; }
-      if (!agent) { err.textContent = 'Indiquez votre nom.'; $('#decAgent').focus(); return; }
-      const data = { ids: ids, statut: statut, commentaire: com, agent: agent };
+      const data = { ids: ids, statut: statut, commentaire: com };
       if ($('#decQte') && statut === 'VALIDE') {
         const q = Number($('#decQte').value);
         if (!(q >= 0) || $('#decQte').value === '') { err.textContent = 'Quantité validée invalide.'; return; }
         data.quantite_validee = Math.round(q);
       }
-      memoire.ecrire('bud27_agent', agent);
       chargement(true);
       try {
         await Store.decide(S.session, data);
@@ -888,7 +1055,7 @@
     if (!ids.length) return;
     const lignes = ids.map(parId).filter(Boolean);
     S.ouvert = '__groupe__';
-    $('#pId').textContent = 'Back Office · ' + ids.length + ' ligne(s)';
+    $('#pId').textContent = S.session.poste + ' · ' + ids.length + ' ligne(s)';
     $('#pTitle').textContent = 'Décision groupée';
     $('#pBody').innerHTML = '<div class="ps"><h3 class="pst">Lignes sélectionnées</h3><div class="cart-l">' + lignes.map(function (b) {
       const c = cat(b.categorie);
@@ -927,9 +1094,7 @@
       return '<label style="--catc:' + c.couleur + '"><input type="radio" name="ncat" value="' + esc(c.code) + '"><span>' + ico(c.ico) +
         '<b>' + esc(c.libelle) + '</b><small>' + esc(c.aide) + '</small><small class="n-art">' + c.articles.length + ' articles proposés</small></span></label>';
     }).join('');
-    $('#nTypes').innerHTML = C.TYPES_BESOIN.map(function (t) {
-      return '<label><input type="radio" name="ntype" value="' + esc(t) + '"><span>' + esc(t) + '</span></label>';
-    }).join('');
+
     $('#nQuick').innerHTML = C.MOTIFS_RAPIDES.map(function (m) { return '<button type="button">+ ' + esc(m) + '</button>'; }).join('');
 
     $('#nCats').addEventListener('change', function (e) {
@@ -959,7 +1124,7 @@
       t.value = t.value.trim() ? t.value.trim() + ' — ' + m : m;
       t.classList.remove('err');
     });
-    ['nLibAutre', 'nServ', 'nMotif', 'nDem'].forEach(function (id) {
+    ['nLibAutre', 'nServ', 'nMotif'].forEach(function (id) {
       $('#' + id).addEventListener('input', function () { $('#' + id).classList.remove('err'); });
     });
     $('#nSteps').addEventListener('click', function (e) {
@@ -989,6 +1154,10 @@
   function remplirArticles() {
     const c = cat(N.cat);
     $('#mNewTitle').textContent = 'Besoin ' + c.libelle;
+    N.type = '';
+    $('#nTypes').innerHTML = typesDe(N.cat).map(function (t) {
+      return '<label><input type="radio" name="ntype" value="' + esc(t) + '"><span>' + esc(t) + '</span></label>';
+    }).join('');
     $('#nLib').innerHTML = '<option value="">— Sélectionner un article —</option>' +
       c.articles.map(function (a) { return '<option>' + esc(a) + '</option>'; }).join('') +
       '<option value="' + AUTRE + '">Autre (préciser)…</option>';
@@ -997,10 +1166,12 @@
   }
 
   function ouvrirSaisie() {
-    $('#mNewSite').textContent = S.session.profil + ' · ' + C.CAMPAGNE;
+    const v = C.VALIDATION[S.session.poste];
+    $('#mNewSite').textContent = S.session.site + ' · ' + C.CAMPAGNE;
+    $('#nWho').innerHTML = 'Envoyé au nom de <b>' + esc(S.session.nom) + '</b> (' + esc(S.session.poste) + ', ' + esc(S.session.site) + ')' +
+      (v ? ' — validation par les <b>' + esc(v.toLowerCase()) + 's</b>.' : '.');
     $('#mNew').hidden = false;
     document.body.style.overflow = 'hidden';
-    $('#nDem').value = memoire.lire(cleNom()) || '';
     if (S.panier.length) { rendrePanier(); allerA(4); } else nouvelleLigne(false);
     icones();
   }
@@ -1041,7 +1212,7 @@
     if (n === 4) $('#nSubmitTxt').textContent = 'Envoyer ' + S.panier.length + ' besoin' + (S.panier.length > 1 ? 's' : '');
     $('#nNext').innerHTML = n === 3 ? ico('shopping-cart') + 'Ajouter au panier' : 'Suivant' + ico('arrow-right');
     icones();
-    const focus = { 2: '#nLib', 3: '#nServ', 4: '#nDem' }[n];
+    const focus = { 2: '#nLib', 3: '#nServ' }[n];
     if (focus && window.innerWidth > 700) setTimeout(function () { const el = $(focus); if (el && !el.value) el.focus(); }, 60);
   }
 
@@ -1114,14 +1285,11 @@
 
   async function envoyer() {
     if (!S.panier.length) return;
-    const dem = $('#nDem').value.trim();
-    if (!dem) { erreurSaisie($('#nDem'), 'Indiquez votre nom.'); return; }
-    memoire.ecrire(cleNom(), dem);
     const btn = $('#nSubmit');
     btn.disabled = true;
     chargement(true);
     try {
-      const r = await Store.create(S.session, { demandeur: dem, items: S.panier });
+      const r = await Store.create(S.session, { items: S.panier });
       const n = S.panier.length;
       S.panier = [];
       sauverPanier();
@@ -1134,9 +1302,9 @@
       $('#nErr').innerHTML = '';
       const box = document.createElement('div');
       box.className = 'nstep ok-box';
-      box.innerHTML = '<div class="ok-ic">' + ico('check') + '</div><h3 class="pnm">Besoins envoyés au Back Office</h3>' +
-        '<p class="cs">' + n + ' ligne(s) enregistrée(s) pour ' + esc(S.session.profil) + '.</p><div class="ok-ref">' + esc(r.ref) + '</div>' +
-        '<p class="cs">Vous suivrez leur validation dans « Mes besoins ».</p>' +
+      box.innerHTML = '<div class="ok-ic">' + ico('check') + '</div><h3 class="pnm">Besoins envoyés pour validation</h3>' +
+        '<p class="cs">' + n + ' ligne(s) enregistrée(s) — ' + esc(S.session.nom) + ', ' + esc(S.session.site) + '.</p><div class="ok-ref">' + esc(r.ref) + '</div>' +
+        '<p class="cs">Vous suivrez leur validation dans le registre des besoins.</p>' +
         '<button type="button" class="add-more" id="nAgain" style="margin-top:16px">' + ico('plus') + 'Exprimer d\'autres besoins</button>';
       $('#fNew .mdl-bd').insertBefore(box, $('#nErr'));
       $('#nAgain').addEventListener('click', function () { box.remove(); nouvelleLigne(false); });
@@ -1154,8 +1322,14 @@
 
   function exporterExcel() {
     if (!window.XLSX) { toast("La bibliothèque Excel n'a pas pu être chargée (connexion internet ?).", 'err'); return; }
-    const lignes = S.lignesTable;
-    if (!lignes.length) { toast('Aucun besoin à exporter avec les filtres actuels.', 'err'); return; }
+    if (!estBO()) return;
+    // Responsable : les besoins qu'il a lui-même validés.
+    // Manager : les besoins validés par les responsables et par les managers (dont lui-même).
+    const lignes = filtrer({ ignorerVue: true }).filter(function (b) {
+      if (b.statut !== 'VALIDE') return false;
+      return estManager() ? (b.traite_par_poste === 'Responsable' || b.traite_par_poste === 'Manager') : valideParMoi(b);
+    }).sort(function (a, b) { return String(a.site).localeCompare(String(b.site)) || String(a.id).localeCompare(String(b.id)); });
+    if (!lignes.length) { toast(estManager() ? 'Aucun besoin validé par les responsables ou les managers pour le moment.' : 'Vous n\'avez encore validé aucun besoin.', 'err'); return; }
     const feuille = function (rows, largeurs) {
       const ws = XLSX.utils.json_to_sheet(rows);
       ws['!cols'] = largeurs.map(function (w) { return { wch: w }; });
@@ -1164,14 +1338,14 @@
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, feuille(lignes.map(function (b) {
       return {
-        'N°': b.id, 'Réf. demande': b.ref, 'Saisi le': fDateHeure(b.cree_le), 'Site': b.site, 'Demandeur': b.demandeur,
+        'N°': b.id, 'Réf. demande': b.ref, 'Saisi le': fDateHeure(b.cree_le), 'Site': b.site, 'Demandeur': b.demandeur, 'Poste': b.poste,
         'Catégorie': cat(b.categorie).libelle, 'Type besoin': b.type_besoin, 'Libellé': b.libelle,
         'Quantité demandée': Number(b.quantite) || 0, 'Caractéristiques': b.caracteristiques,
         'Service bénéficiaire': b.service, 'Personne bénéficiaire': b.personne, 'Motif': b.motif, 'Commentaires': b.commentaires,
         'Statut': (STATUTS[b.statut] || {}).libelle, 'Quantité validée': b.statut === 'VALIDE' ? Number(b.quantite_validee) || 0 : '',
-        'Commentaire Back Office': b.commentaire_bo, 'Traité par': b.traite_par, 'Mis à jour le': fDateHeure(b.maj_le),
+        'Commentaire du valideur': b.commentaire_bo, 'Validé par': b.traite_par, 'Poste du valideur': b.traite_par_poste, 'Validé le': fDateHeure(b.maj_le),
       };
-    }), [14, 11, 16, 18, 20, 13, 22, 30, 10, 30, 18, 20, 40, 30, 11, 10, 30, 18, 16]), 'Besoins');
+    }), [14, 11, 16, 18, 20, 18, 13, 22, 30, 10, 30, 18, 20, 40, 30, 11, 10, 30, 18, 16]), 'Besoins validés');
 
     const m = {};
     lignes.filter(function (b) { return b.statut !== 'REJETE'; }).forEach(function (b) {
@@ -1196,7 +1370,7 @@
         return Object.assign(row, { 'Qté totale': st.qte, 'En attente': st.EN_ATTENTE, 'Validées': st.VALIDE, 'Rejetées': st.REJETE, 'Qté validée': st.qteValidee, 'Taux de traitement (%)': st.taux });
       }), [20, 8, 16, 12, 12, 11, 11, 10, 10, 12, 20]), 'Synthèse par site');
     }
-    const nom = 'Besoins_' + C.CAMPAGNE.replace(/\s+/g, '_') + '_' + (estBO() ? 'BackOffice' : S.session.profil.replace(/\s+/g, '_')) + '_' + fDate(new Date()).replace(/\//g, '-') + '.xlsx';
+    const nom = 'Besoins_valides_' + C.CAMPAGNE.replace(/\s+/g, '_') + '_' + S.session.nom.replace(/\s+/g, '_') + '_' + fDate(new Date()).replace(/\//g, '-') + '.xlsx';
     XLSX.writeFile(wb, nom);
     toast('Export Excel généré.', 'ok');
   }
@@ -1205,9 +1379,8 @@
 
   initConnexion();
   const sess = memoire.lire(CLE_SESSION);
-  if (sess && sess.profil) {
-    profilChoisi = sess.profil;
-    connecter(sess.profil, sess.code || '', true);
+  if (sess && sess.token && sess.poste) {
+    demarrerSession(sess); // un jeton expiré renvoie à l'écran de connexion
   } else {
     afficherConnexion();
   }

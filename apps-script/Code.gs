@@ -4,27 +4,66 @@
  *
  * Mise en service : voir README.md (section « Mise en service »).
  *   1. Coller ce fichier dans Extensions > Apps Script de la feuille Google Sheets.
- *   2. Exécuter une fois la fonction setup() (autorisations + création des onglets).
+ *   2. Exécuter une fois la fonction setup() (autorisations, dont l'envoi d'e-mails + création des onglets).
  *   3. Déployer > Nouveau déploiement > Application Web
  *      (Exécuter en tant que : Moi — Qui a accès : Tout le monde).
  *   4. Copier l'URL /exec dans assets/js/config.js (API_URL).
  *
- * Onglets créés :
- *   - Besoins  : une ligne par besoin exprimé (une demande = plusieurs lignes, même réf.).
- *   - Acces    : un code d'accès facultatif par profil (vide = pas de code).
- *   - Synthese : tableaux récapitulatifs (formules, mis à jour automatiquement).
+ * Onglets :
+ *   - Besoins   : une ligne par besoin exprimé (une demande = plusieurs lignes, même réf.).
+ *   - Personnes : agents du siège (nom, poste, e-mail) — reçoivent un code à 4 chiffres pour se connecter.
+ *   - Synthese  : tableaux récapitulatifs (formules, mis à jour automatiquement).
+ *
+ * Connexion :
+ *   - Caissière ordinaire / Caissière E-money : site + nom, accès direct.
+ *   - Opérateur, Assistant, Chef, Responsable, Manager : site SIEGE, nom choisi dans « Personnes »,
+ *     code à 4 chiffres envoyé par e-mail, valable OTP_MINUTES minutes.
  */
 
-const BACK_OFFICE = 'BACK OFFICE';
-
+const SITE_SIEGE = 'SIEGE';
 const SITES = [
-  'SIEGE', 'CGI ABOBO', 'CGI ABOISSO', 'CGI AGBOVILLE', 'CGI ANGRE', 'CGI BONDOUKOU',
-  'CGI BONGOUANOU', 'CGI BOUAKE', 'CGI BOUNA', 'CGI BOUNDIALI', 'CGI COSMOS', 'CGI DAOUKRO',
-  'CGI DIMBOKRO', 'CGI DIVO', 'CGI FERKE', 'CGI GUIGLO', 'CGI KONG', 'CGI MANKONO',
-  'CGI ODIENNE', 'CGI PHB', 'CGI SASSANDRA', 'CGI SEGUELA', 'CGI TOUBA', 'CGI VGE',
-  'CGI YOPOUGON', 'FOURRIERE ABOBO', 'FOURRIERE BASSAM', 'BARRAGE GSR1', 'BARRAGE GSR2',
-  'BARRAGE GSR3', 'BARRAGE PSSR1', 'BARRAGE PSSR2',
+  'SIEGE', 'ABOBO', 'ABOISSO', 'AGBOVILLE', 'ANGRE', 'BONDOUKOU', 'BONGOUANOU', 'BOUAKE',
+  'BOUNA', 'BOUNDIALI', 'COSMOS', 'DAOUKRO', 'DIMBOKRO', 'DIVO', 'FERKE', 'GUIGLO', 'KONG',
+  'MANKONO', 'ODIENNE', 'PHB', 'SASSANDRA', 'SEGUELA', 'TOUBA', 'VGE', 'YOPOUGON',
+  'FOURRIERE ABOBO', 'FOURRIERE BASSAM', 'BARRAGE GSR1', 'BARRAGE GSR2', 'BARRAGE GSR3',
+  'BARRAGE PSSR1', 'BARRAGE PSSR2',
 ];
+
+const POSTES_SITE = ['Caissière ordinaire', 'Caissière E-money'];
+const POSTES_SIEGE = ['Opérateur', 'Assistant', 'Chef', 'Responsable', 'Manager'];
+
+// Poste du demandeur → poste qui valide. À garder identique à VALIDATION dans assets/js/config.js.
+const VALIDATION = {
+  'Caissière ordinaire': 'Responsable',
+  'Caissière E-money': 'Responsable',
+  'Chef': 'Responsable',
+  'Opérateur': 'Responsable',
+  'Assistant': 'Responsable',
+  'Responsable': 'Manager',
+  'Manager': 'Manager',
+};
+
+// Valeurs initiales de l'onglet « Personnes » (modifiable ensuite directement dans la feuille).
+const PERSONNES_INIT = [
+  ['Isaac Kone', 'Opérateur', 'isaac.kone@cgi.ci'],
+  ['Yasmine Kamagate', 'Opérateur', 'yasmine.kamagate@cgi.ci'],
+  ['Anne Adjo', 'Opérateur', 'anne.niamkoun@cgi.ci'],
+  ['Aminata Sow', 'Assistant', 'aminata.sow@cgi.ci'],
+  ['Kady Bakayoko', 'Assistant', 'karidja.bakayoko@cgi.ci'],
+  ['Axel Kouamenan', 'Chef', 'axel.kouamenan@cgi.ci'],
+  ['Kader Soro', 'Chef', 'kader.soro@cgi.ci'],
+  ['Zeinab Kone', 'Responsable', 'zeinab.kone@cgi.ci'],
+  ['Yaya Comara', 'Responsable', 'yaya.comara@cgi.ci'],
+  ['Massandje Dagnoko', 'Responsable', 'massandje.dagnoko@cgi.ci'],
+  ['Rita Kessie', 'Responsable', 'rita.kessie@cgi.ci'],
+  ['Issa Kone', 'Manager', 'issa.kone@cgi.ci'],
+  ['Jansenus Koffi', 'Manager', 'jansenus.koffi@cgi.ci'],
+];
+
+const OTP_MINUTES = 5;
+const OTP_ESSAIS_MAX = 5;
+const OTP_DELAI_RENVOI_S = 30;
+const SESSION_SECONDES = 6 * 3600; // maximum autorisé par CacheService
 
 // À garder identique aux codes de CATEGORIES dans assets/js/config.js.
 const CATEGORIES = ['INFORMATIQUE', 'MOBILIER', 'ACHATS'];
@@ -33,7 +72,7 @@ const STATUTS = ['EN_ATTENTE', 'VALIDE', 'REJETE'];
 const COLS = [
   'id', 'ref', 'cree_le', 'site', 'demandeur', 'categorie', 'type_besoin', 'libelle', 'quantite',
   'caracteristiques', 'service', 'personne', 'motif', 'commentaires', 'statut', 'quantite_validee',
-  'commentaire_bo', 'traite_par', 'maj_le',
+  'commentaire_bo', 'traite_par', 'maj_le', 'poste', 'demandeur_id', 'traite_par_poste', 'traite_par_id',
 ];
 const NUMERIQUES = ['quantite', 'quantite_validee'];
 
@@ -56,7 +95,7 @@ function doPost(e) {
   return json_(out);
 }
 
-/** À exécuter une fois depuis l'éditeur : crée les onglets et mémorise la feuille. */
+/** À exécuter une fois depuis l'éditeur : crée les onglets, mémorise la feuille, autorise l'envoi d'e-mails. */
 function setup() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   ss.setSpreadsheetTimeZone('Africa/Abidjan');
@@ -66,58 +105,170 @@ function setup() {
   const defaut = ss.getSheetByName('Feuille 1') || ss.getSheetByName('Sheet1');
   if (defaut && defaut.getLastRow() === 0 && ss.getSheets().length > 1) ss.deleteSheet(defaut);
   ss.setActiveSheet(db.besoins);
+  Logger.log('Quota d\'e-mails restant aujourd\'hui : ' + MailApp.getRemainingDailyQuota());
   Logger.log('Onglets prêts. Déployez maintenant le script en Application Web.');
 }
 
 /* ------------------------------------------------------------------ */
-/* Routage et authentification                                         */
+/* Routage                                                             */
 /* ------------------------------------------------------------------ */
 
 function route_(req) {
-  const sess = auth_(req.profil, req.code);
+  const d = req.data || {};
   switch (req.action) {
-    case 'login':
-      return { ok: true, profil: sess.profil, isBO: sess.isBO };
-    case 'list':
-      return { ok: true, besoins: lister_(sess) };
-    case 'create':
-      return Object.assign({ ok: true }, creer_(sess, req.data || {}));
-    case 'decide':
-      return Object.assign({ ok: true }, decider_(sess, req.data || {}));
-    case 'cancel':
-      return Object.assign({ ok: true }, retirer_(sess, req.data || {}));
-    default:
-      throw erreur_('ACTION_INCONNUE', 'Action inconnue.');
+    // Sans session
+    case 'annuaire': return { ok: true, personnes: annuaire_() };
+    case 'envoyerCode': return Object.assign({ ok: true }, envoyerCode_(d));
+    case 'verifierCode': return Object.assign({ ok: true }, verifierCode_(d));
+    case 'connexionSite': return Object.assign({ ok: true }, connexionSite_(d));
+  }
+  const sess = session_(req.token);
+  switch (req.action) {
+    case 'moi': return { ok: true, session: sess };
+    case 'deconnexion': CacheService.getScriptCache().remove('sess_' + req.token); return { ok: true };
+    case 'list': return { ok: true, besoins: lister_(sess) };
+    case 'create': return Object.assign({ ok: true }, creer_(sess, d));
+    case 'decide': return Object.assign({ ok: true }, decider_(sess, d));
+    case 'cancel': return Object.assign({ ok: true }, retirer_(sess, d));
+    default: throw erreur_('ACTION_INCONNUE', 'Action inconnue.');
   }
 }
 
-function auth_(profil, code) {
-  const p = String(profil || '').trim().toUpperCase();
-  if (!p) throw erreur_('PROFIL_INCONNU', 'Profil manquant.');
-  const acces = base_().acces.getDataRange().getValues().slice(1);
-  const ligne = acces.find(function (r) { return String(r[0]).trim().toUpperCase() === p; });
-  if (!ligne) throw erreur_('PROFIL_INCONNU', 'Profil « ' + p + ' » inconnu.');
-  const attendu = String(ligne[1] || '').trim();
-  if (attendu) {
-    if (!code) throw erreur_('CODE_REQUIS', "Code d'accès requis.");
-    if (String(code).trim() !== attendu) throw erreur_('CODE_INVALIDE', "Code d'accès incorrect.");
+/* ------------------------------------------------------------------ */
+/* Connexion                                                           */
+/* ------------------------------------------------------------------ */
+
+function personnes_() {
+  const sh = base_().personnes;
+  if (sh.getLastRow() < 2) return [];
+  return sh.getRange(2, 1, sh.getLastRow() - 1, 3).getValues()
+    .map(function (r) { return { nom: String(r[0]).trim(), poste: String(r[1]).trim(), email: String(r[2]).trim().toLowerCase() }; })
+    .filter(function (p) { return p.nom && p.email && POSTES_SIEGE.indexOf(p.poste) >= 0; });
+}
+
+function masquer_(email) {
+  const m = String(email).split('@');
+  return m[0].charAt(0) + '•••' + (m[0].length > 1 ? m[0].slice(-1) : '') + '@' + (m[1] || '');
+}
+
+/** Liste publique (sans les adresses complètes) pour l'écran de connexion. */
+function annuaire_() {
+  return personnes_().map(function (p) { return { nom: p.nom, poste: p.poste, email: masquer_(p.email) }; });
+}
+
+function trouverPersonne_(poste, nom) {
+  const p = personnes_().find(function (x) { return x.poste === String(poste) && x.nom === String(nom); });
+  if (!p) throw erreur_('PERSONNE_INCONNUE', 'Personne inconnue pour ce poste.');
+  return p;
+}
+
+function envoyerCode_(d) {
+  const p = trouverPersonne_(d.poste, d.nom);
+  const cache = CacheService.getScriptCache();
+  const cleRenvoi = 'otp_renvoi_' + p.email;
+  if (cache.get(cleRenvoi)) throw erreur_('TROP_TOT', 'Un code vient d\'être envoyé. Patientez quelques secondes avant d\'en demander un autre.');
+
+  const code = ('000' + Math.floor(Math.random() * 10000)).slice(-4);
+  const expire = Date.now() + OTP_MINUTES * 60000;
+  cache.put('otp_' + p.email, JSON.stringify({ code: code, expire: expire, essais: 0 }), OTP_MINUTES * 60);
+  cache.put(cleRenvoi, '1', OTP_DELAI_RENVOI_S);
+
+  MailApp.sendEmail({
+    to: p.email,
+    subject: 'Votre code de connexion : ' + code + ' — Besoins Budget 2027',
+    htmlBody:
+      '<div style="font-family:Arial,sans-serif;color:#111827">' +
+      '<p>Bonjour ' + p.nom + ',</p>' +
+      '<p>Voici votre code de connexion à la plateforme <b>Expression des Besoins — Budget 2027</b> (QFS E-Money) :</p>' +
+      '<p style="font-size:32px;font-weight:bold;letter-spacing:8px;margin:18px 0">' + code + '</p>' +
+      '<p>Ce code est valable <b>' + OTP_MINUTES + ' minutes</b>. Si vous n\'êtes pas à l\'origine de cette demande, ignorez ce message.</p>' +
+      '<p style="color:#6b7280;font-size:12px">Quipux Financial Services — message automatique, merci de ne pas répondre.</p></div>',
+    name: 'QFS — Besoins Budget 2027',
+  });
+  return { email: masquer_(p.email), expire: expire, duree: OTP_MINUTES * 60 };
+}
+
+function verifierCode_(d) {
+  const p = trouverPersonne_(d.poste, d.nom);
+  const cache = CacheService.getScriptCache();
+  const cle = 'otp_' + p.email;
+  const brut = cache.get(cle);
+  const otp = brut ? JSON.parse(brut) : null;
+  if (!otp || Date.now() > otp.expire) {
+    cache.remove(cle);
+    throw erreur_('CODE_EXPIRE', 'Code expiré. Générez un nouveau code.');
   }
-  return { profil: p, isBO: p === BACK_OFFICE };
+  if (String(d.code || '').trim() !== otp.code) {
+    otp.essais++;
+    if (otp.essais >= OTP_ESSAIS_MAX) {
+      cache.remove(cle);
+      throw erreur_('CODE_EXPIRE', 'Trop de tentatives. Générez un nouveau code.');
+    }
+    const reste = Math.max(1, Math.floor((otp.expire - Date.now()) / 1000));
+    cache.put(cle, JSON.stringify(otp), reste);
+    throw erreur_('CODE_INVALIDE', 'Code incorrect (' + (OTP_ESSAIS_MAX - otp.essais) + ' essai(s) restant(s)).');
+  }
+  cache.remove(cle);
+  return ouvrirSession_({ poste: p.poste, site: SITE_SIEGE, nom: p.nom, id: p.email });
+}
+
+function connexionSite_(d) {
+  const poste = String(d.poste || '');
+  const site = String(d.site || '').trim().toUpperCase();
+  const nom = texte_(d.nom, 80);
+  if (POSTES_SITE.indexOf(poste) < 0) throw erreur_('INTERDIT', 'Ce poste se connecte avec un code envoyé par e-mail.');
+  if (SITES.indexOf(site) < 0) throw erreur_('VALIDATION', 'Site inconnu.');
+  if (nom.length < 2) throw erreur_('VALIDATION', 'Indiquez votre nom et prénom.');
+  return ouvrirSession_({ poste: poste, site: site, nom: nom, id: '' });
+}
+
+function ouvrirSession_(s) {
+  const token = (Utilities.getUuid() + Utilities.getUuid()).replace(/-/g, '');
+  CacheService.getScriptCache().put('sess_' + token, JSON.stringify(s), SESSION_SECONDES);
+  return { token: token, session: s };
+}
+
+function session_(token) {
+  if (!token) throw erreur_('SESSION_EXPIREE', 'Veuillez vous connecter.');
+  const cache = CacheService.getScriptCache();
+  const brut = cache.get('sess_' + token);
+  if (!brut) throw erreur_('SESSION_EXPIREE', 'Session expirée, veuillez vous reconnecter.');
+  cache.put('sess_' + token, brut, SESSION_SECONDES); // prolonge la session tant qu'elle est utilisée
+  return JSON.parse(brut);
+}
+
+/* ------------------------------------------------------------------ */
+/* Droits                                                              */
+/* ------------------------------------------------------------------ */
+
+function estMien_(s, b) {
+  if (s.id) return b.demandeur_id === s.id;
+  return b.site === s.site && b.demandeur === s.nom && b.poste === s.poste;
+}
+
+function peutVoir_(s, b) {
+  if (s.poste === 'Manager') return true;
+  if (estMien_(s, b)) return true;
+  if (s.poste === 'Responsable') return VALIDATION[b.poste] === 'Responsable';
+  if (POSTES_SITE.indexOf(s.poste) >= 0) return b.site === s.site && POSTES_SITE.indexOf(b.poste) >= 0;
+  return false;
+}
+
+function peutDecider_(s, b) {
+  if (VALIDATION[b.poste] !== s.poste) return false;
+  if (s.poste === 'Responsable' && estMien_(s, b)) return false; // un responsable ne valide pas ses propres besoins
+  return true;
 }
 
 /* ------------------------------------------------------------------ */
 /* Métier                                                              */
 /* ------------------------------------------------------------------ */
 
-function lister_(sess) {
-  const tous = lire_(base_().besoins);
-  return sess.isBO ? tous : tous.filter(function (b) { return b.site === sess.profil; });
+function lister_(s) {
+  return lire_(base_().besoins).filter(function (b) { return peutVoir_(s, b); });
 }
 
-function creer_(sess, data) {
-  if (sess.isBO) throw erreur_('INTERDIT', 'Seul un site peut exprimer des besoins.');
-  const demandeur = texte_(data.demandeur, 80);
-  if (!demandeur) throw erreur_('VALIDATION', 'Indiquez le nom du demandeur.');
+function creer_(s, data) {
   const items = (data.items || []).map(valider_);
   if (!items.length) throw erreur_('VALIDATION', 'Aucun besoin à enregistrer.');
   if (items.length > 100) throw erreur_('VALIDATION', 'Maximum 100 lignes par envoi.');
@@ -128,9 +279,9 @@ function creer_(sess, data) {
     const now = new Date().toISOString();
     const crees = items.map(function (it, k) {
       return Object.assign(it, {
-        id: ref + '-' + ('0' + (k + 1)).slice(-2), ref: ref, cree_le: now, site: sess.profil,
-        demandeur: demandeur, statut: 'EN_ATTENTE', quantite_validee: '', commentaire_bo: '',
-        traite_par: '', maj_le: now,
+        id: ref + '-' + ('0' + (k + 1)).slice(-2), ref: ref, cree_le: now, site: s.site,
+        demandeur: s.nom, poste: s.poste, demandeur_id: s.id || '', statut: 'EN_ATTENTE',
+        quantite_validee: '', commentaire_bo: '', traite_par: '', traite_par_poste: '', traite_par_id: '', maj_le: now,
       });
     });
     const lignes = crees.map(function (b) { return versLigne_(b); });
@@ -139,16 +290,13 @@ function creer_(sess, data) {
   });
 }
 
-function decider_(sess, data) {
-  if (!sess.isBO) throw erreur_('INTERDIT', 'Réservé au Back Office.');
+function decider_(s, data) {
   const statut = String(data.statut || '');
   if (STATUTS.indexOf(statut) < 0) throw erreur_('VALIDATION', 'Décision inconnue.');
   const ids = (data.ids || []).map(String);
   if (!ids.length) throw erreur_('VALIDATION', 'Aucun besoin sélectionné.');
   const commentaire = texte_(data.commentaire, 1000);
   if (statut === 'REJETE' && !commentaire) throw erreur_('VALIDATION', 'Un commentaire est obligatoire pour un rejet.');
-  const agent = texte_(data.agent, 80);
-  if (!agent) throw erreur_('VALIDATION', "Indiquez le nom de l'agent.");
 
   return verrou_(function () {
     const sh = base_().besoins;
@@ -160,6 +308,7 @@ function decider_(sess, data) {
     valeurs.forEach(function (r, k) {
       if (ids.indexOf(String(r[0])) < 0) return;
       const b = depuisLigne_(r);
+      if (!peutDecider_(s, b)) throw erreur_('INTERDIT', 'Vous ne pouvez pas valider le besoin ' + b.id + '.');
       b.statut = statut;
       if (statut === 'VALIDE') {
         const q = ids.length === 1 && data.quantite_validee !== undefined && data.quantite_validee !== '' ? Number(data.quantite_validee) : b.quantite;
@@ -169,7 +318,9 @@ function decider_(sess, data) {
         b.quantite_validee = '';
       }
       b.commentaire_bo = commentaire;
-      b.traite_par = agent;
+      b.traite_par = statut === 'EN_ATTENTE' ? '' : s.nom;
+      b.traite_par_poste = statut === 'EN_ATTENTE' ? '' : s.poste;
+      b.traite_par_id = statut === 'EN_ATTENTE' ? '' : (s.id || '');
       b.maj_le = now;
       sh.getRange(k + 2, 1, 1, COLS.length).setValues([versLigne_(b)]);
       maj++;
@@ -179,14 +330,13 @@ function decider_(sess, data) {
   });
 }
 
-function retirer_(sess, data) {
-  if (sess.isBO) throw erreur_('INTERDIT', 'Réservé aux sites.');
+function retirer_(s, data) {
   return verrou_(function () {
     const sh = base_().besoins;
     const ligne = trouverLigne_(sh, data.id);
     if (!ligne) throw erreur_('INTROUVABLE', 'Besoin introuvable.');
     const b = depuisLigne_(sh.getRange(ligne, 1, 1, COLS.length).getValues()[0]);
-    if (b.site !== sess.profil) throw erreur_('INTERDIT', "Besoin d'un autre site.");
+    if (!estMien_(s, b)) throw erreur_('INTERDIT', 'Vous ne pouvez retirer que vos propres besoins.');
     if (b.statut !== 'EN_ATTENTE') throw erreur_('INTERDIT', 'Seuls les besoins en attente peuvent être retirés.');
     sh.deleteRow(ligne);
     return { id: b.id };
@@ -223,12 +373,12 @@ function base_() {
   const id = PropertiesService.getScriptProperties().getProperty('SHEET_ID');
   const ss = id ? SpreadsheetApp.openById(id) : SpreadsheetApp.getActiveSpreadsheet();
   const besoins = onglet_(ss, 'Besoins', COLS);
-  const acces = onglet_(ss, 'Acces', ['profil', 'code']);
-  if (acces.getLastRow() < 2) {
-    const lignes = [[BACK_OFFICE, '']].concat(SITES.map(function (p) { return [p, '']; }));
-    acces.getRange(2, 1, lignes.length, 2).setValues(lignes);
+  const personnes = onglet_(ss, 'Personnes', ['nom', 'poste', 'email']);
+  if (personnes.getLastRow() < 2) {
+    personnes.getRange(2, 1, PERSONNES_INIT.length, 3).setValues(PERSONNES_INIT);
+    personnes.setColumnWidths(1, 3, 220);
   }
-  return { besoins: besoins, acces: acces };
+  return { besoins: besoins, personnes: personnes };
 }
 
 function onglet_(ss, nom, cols) {
@@ -252,11 +402,11 @@ function synthese_(ss) {
   const sy = ss.insertSheet('Synthese');
   sy.getRange('A1').setValue('Quantités par catégorie et article (hors rejets)');
   sy.getRange('A2').setFormula(
-    '=IFERROR(QUERY(Besoins!A1:S, "select F, H, count(A), sum(I), sum(P) where A is not null and O <> \'REJETE\' ' +
+    '=IFERROR(QUERY(Besoins!A1:W, "select F, H, count(A), sum(I), sum(P) where A is not null and O <> \'REJETE\' ' +
     'group by F, H order by F, sum(I) desc label F \'Catégorie\', H \'Article\', count(A) \'Lignes\', sum(I) \'Qté demandée\', sum(P) \'Qté validée\'", 1), "Aucune donnée")');
   sy.getRange('H1').setValue('Quantités demandées par site et catégorie (hors rejets)');
   sy.getRange('H2').setFormula(
-    '=IFERROR(QUERY(Besoins!A1:S, "select D, sum(I) where A is not null and O <> \'REJETE\' group by D pivot F label D \'Site\'", 1), "Aucune donnée")');
+    '=IFERROR(QUERY(Besoins!A1:W, "select D, sum(I) where A is not null and O <> \'REJETE\' group by D pivot F label D \'Site\'", 1), "Aucune donnée")');
   sy.getRange('A1:N1').setFontWeight('bold').setFontColor('#0D47A1');
   sy.setColumnWidth(2, 280);
 }

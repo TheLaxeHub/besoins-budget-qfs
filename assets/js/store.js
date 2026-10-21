@@ -1,16 +1,18 @@
 /*
  * Accès aux données : API Google Apps Script (apps-script/Code.gs).
- * La feuille Google Sheets sert de base partagée entre les sites et le Back Office.
- * Interface : login, list, create, decide, cancel.
+ * La feuille Google Sheets sert de base partagée.
+ *
+ * Connexion : annuaire, envoyerCode, verifierCode (postes du siège), connexionSite (caissières).
+ * Données (avec jeton de session) : list, create, decide, cancel, deconnexion.
  *
  * Si API_URL est vide (config.js), un MODE DÉMONSTRATION local est utilisé :
- * mêmes règles que le serveur, données gardées dans ce navigateur uniquement.
+ * mêmes règles que le serveur, données gardées dans ce navigateur, code affiché à l'écran.
  */
 (function () {
   'use strict';
   const C = window.APP_CONFIG;
-  const BO = C.BACK_OFFICE;
   const CATS = C.CATEGORIES.map(function (c) { return c.code; });
+  const POSTES_SITE = C.POSTES.filter(function (p) { return !p.siege; }).map(function (p) { return p.libelle; });
 
   function erreur(code, message) {
     const e = new Error(message);
@@ -45,46 +47,122 @@
 
   /* ---------------- Mode démonstration (navigateur) ---------------- */
 
-  const CLE_DEMO = 'bud27_demo_v1';
+  const CLE_DEMO = 'bud27_demo_v2';
   function lireDemo() {
-    try { return JSON.parse(localStorage.getItem(CLE_DEMO)) || { seq: 0, besoins: [] }; } catch (e) { return { seq: 0, besoins: [] }; }
+    try { return JSON.parse(localStorage.getItem(CLE_DEMO)) || { seq: 0, besoins: [], otp: {}, sessions: {} }; } catch (e) { return { seq: 0, besoins: [], otp: {}, sessions: {} }; }
   }
   function ecrireDemo(db) {
     try { localStorage.setItem(CLE_DEMO, JSON.stringify(db)); } catch (e) { /* stockage indisponible */ }
   }
   function texte(v, max) { return String(v === null || v === undefined ? '' : v).trim().slice(0, max); }
+  const slug = function (s) { return String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z]+/g, '.'); };
+  const personnesDemo = function () {
+    const out = [];
+    C.POSTES.forEach(function (p) {
+      (p.personnes || []).forEach(function (n) { out.push({ nom: n, poste: p.libelle, email: slug(n) + '@cgi.ci' }); });
+    });
+    return out;
+  };
+  const masquer = function (email) { const m = email.split('@'); return m[0].charAt(0) + '•••' + m[0].slice(-1) + '@' + m[1]; };
+
+  function personneDemo(poste, nom) {
+    const p = personnesDemo().find(function (x) { return x.poste === poste && x.nom === nom; });
+    if (!p) throw erreur('PERSONNE_INCONNUE', 'Personne inconnue pour ce poste.');
+    return p;
+  }
+  function sessionDemo(token) {
+    const db = lireDemo();
+    const s = db.sessions[token];
+    if (!s) throw erreur('SESSION_EXPIREE', 'Session expirée, veuillez vous reconnecter.');
+    return s;
+  }
+  function ouvrirDemo(s) {
+    const db = lireDemo();
+    const token = 'demo' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+    db.sessions[token] = s;
+    ecrireDemo(db);
+    return { ok: true, token: token, session: s };
+  }
+  const estMien = function (s, b) { return s.id ? b.demandeur_id === s.id : b.site === s.site && b.demandeur === s.nom && b.poste === s.poste; };
+  const peutVoir = function (s, b) {
+    if (s.poste === 'Manager' || estMien(s, b)) return true;
+    if (s.poste === 'Responsable') return C.VALIDATION[b.poste] === 'Responsable';
+    if (POSTES_SITE.indexOf(s.poste) >= 0) return b.site === s.site && POSTES_SITE.indexOf(b.poste) >= 0;
+    return false;
+  };
+  const peutDecider = function (s, b) {
+    if (C.VALIDATION[b.poste] !== s.poste) return false;
+    return !(s.poste === 'Responsable' && estMien(s, b));
+  };
 
   const demo = {
-    login: function (p) {
-      const profil = texte(p.profil, 60).toUpperCase();
-      if (profil !== BO && C.SITES.indexOf(profil) < 0) throw erreur('PROFIL_INCONNU', 'Profil inconnu.');
-      return { ok: true, profil: profil, isBO: profil === BO };
+    annuaire: function () {
+      return { ok: true, personnes: personnesDemo().map(function (p) { return { nom: p.nom, poste: p.poste, email: masquer(p.email) }; }) };
+    },
+    envoyerCode: function (p) {
+      const d = p.data || {};
+      const pers = personneDemo(d.poste, d.nom);
+      const db = lireDemo();
+      const prec = db.otp[pers.email];
+      if (prec && Date.now() - prec.envoye < 30000) throw erreur('TROP_TOT', "Un code vient d'être envoyé. Patientez quelques secondes avant d'en demander un autre.");
+      const code = String(Math.floor(Math.random() * 10000)).padStart(4, '0');
+      const expire = Date.now() + C.OTP_MINUTES * 60000;
+      db.otp[pers.email] = { code: code, expire: expire, essais: 0, envoye: Date.now() };
+      ecrireDemo(db);
+      return { ok: true, email: masquer(pers.email), expire: expire, duree: C.OTP_MINUTES * 60, demoCode: code };
+    },
+    verifierCode: function (p) {
+      const d = p.data || {};
+      const pers = personneDemo(d.poste, d.nom);
+      const db = lireDemo();
+      const otp = db.otp[pers.email];
+      if (!otp || Date.now() > otp.expire) { delete db.otp[pers.email]; ecrireDemo(db); throw erreur('CODE_EXPIRE', 'Code expiré. Générez un nouveau code.'); }
+      if (String(d.code) !== otp.code) {
+        otp.essais++;
+        if (otp.essais >= 5) { delete db.otp[pers.email]; ecrireDemo(db); throw erreur('CODE_EXPIRE', 'Trop de tentatives. Générez un nouveau code.'); }
+        ecrireDemo(db);
+        throw erreur('CODE_INVALIDE', 'Code incorrect (' + (5 - otp.essais) + ' essai(s) restant(s)).');
+      }
+      delete db.otp[pers.email];
+      ecrireDemo(db);
+      return ouvrirDemo({ poste: pers.poste, site: C.SITE_SIEGE, nom: pers.nom, id: pers.email });
+    },
+    connexionSite: function (p) {
+      const d = p.data || {};
+      if (POSTES_SITE.indexOf(d.poste) < 0) throw erreur('INTERDIT', 'Ce poste se connecte avec un code envoyé par e-mail.');
+      if (C.SITES.indexOf(d.site) < 0) throw erreur('VALIDATION', 'Site inconnu.');
+      const nom = texte(d.nom, 80);
+      if (nom.length < 2) throw erreur('VALIDATION', 'Indiquez votre nom et prénom.');
+      return ouvrirDemo({ poste: d.poste, site: d.site, nom: nom, id: '' });
+    },
+    deconnexion: function (p) {
+      const db = lireDemo();
+      delete db.sessions[p.token];
+      ecrireDemo(db);
+      return { ok: true };
     },
     list: function (p) {
-      const db = lireDemo();
-      const b = p.profil === BO ? db.besoins : db.besoins.filter(function (x) { return x.site === p.profil; });
-      return { ok: true, besoins: b };
+      const s = sessionDemo(p.token);
+      return { ok: true, besoins: lireDemo().besoins.filter(function (b) { return peutVoir(s, b); }) };
     },
     create: function (p) {
-      if (p.profil === BO) throw erreur('INTERDIT', 'Seul un site peut exprimer des besoins.');
-      const d = p.data || {};
-      const items = d.items || [];
+      const s = sessionDemo(p.token);
+      const items = (p.data || {}).items || [];
       if (!items.length) throw erreur('VALIDATION', 'Aucun besoin à enregistrer.');
       const db = lireDemo();
       const now = new Date().toISOString();
-      const refSeq = ++db.seq;
-      const ref = 'B27-' + String(refSeq).padStart(4, '0');
+      const ref = 'B27-' + String(++db.seq).padStart(4, '0');
       const crees = items.map(function (it, k) {
         if (CATS.indexOf(it.categorie) < 0 || !it.libelle || !it.type_besoin || !(it.quantite > 0) || !it.service || !it.motif) {
           throw erreur('VALIDATION', 'Ligne ' + (k + 1) + ' incomplète.');
         }
         return {
-          id: ref + '-' + String(k + 1).padStart(2, '0'), ref: ref, cree_le: now, site: p.profil,
-          demandeur: texte(d.demandeur, 80), categorie: it.categorie, type_besoin: texte(it.type_besoin, 60),
-          libelle: texte(it.libelle, 120), quantite: Math.round(Number(it.quantite)),
+          id: ref + '-' + String(k + 1).padStart(2, '0'), ref: ref, cree_le: now, site: s.site,
+          demandeur: s.nom, poste: s.poste, demandeur_id: s.id || '', categorie: it.categorie,
+          type_besoin: texte(it.type_besoin, 60), libelle: texte(it.libelle, 120), quantite: Math.round(Number(it.quantite)),
           caracteristiques: texte(it.caracteristiques, 300), service: texte(it.service, 80),
           personne: texte(it.personne, 80), motif: texte(it.motif, 1000), commentaires: texte(it.commentaires, 1000),
-          statut: 'EN_ATTENTE', quantite_validee: '', commentaire_bo: '', traite_par: '', maj_le: now,
+          statut: 'EN_ATTENTE', quantite_validee: '', commentaire_bo: '', traite_par: '', traite_par_poste: '', traite_par_id: '', maj_le: now,
         };
       });
       db.besoins = db.besoins.concat(crees);
@@ -92,26 +170,33 @@
       return { ok: true, ref: ref, besoins: crees };
     },
     decide: function (p) {
-      if (p.profil !== BO) throw erreur('INTERDIT', 'Réservé au Back Office.');
+      const s = sessionDemo(p.token);
       const d = p.data || {};
+      if (d.statut === 'REJETE' && !texte(d.commentaire, 1000)) throw erreur('VALIDATION', 'Un commentaire est obligatoire pour un rejet.');
       const db = lireDemo();
       const now = new Date().toISOString();
       const ids = d.ids || [];
       db.besoins.forEach(function (b) {
         if (ids.indexOf(b.id) < 0) return;
+        if (!peutDecider(s, b)) throw erreur('INTERDIT', 'Vous ne pouvez pas valider le besoin ' + b.id + '.');
+        const att = d.statut === 'EN_ATTENTE';
         b.statut = d.statut;
         b.quantite_validee = d.statut === 'VALIDE' ? (d.quantite_validee !== undefined && ids.length === 1 ? Number(d.quantite_validee) : b.quantite) : '';
         b.commentaire_bo = texte(d.commentaire, 1000);
-        b.traite_par = texte(d.agent, 80);
+        b.traite_par = att ? '' : s.nom;
+        b.traite_par_poste = att ? '' : s.poste;
+        b.traite_par_id = att ? '' : (s.id || '');
         b.maj_le = now;
       });
       ecrireDemo(db);
       return { ok: true };
     },
     cancel: function (p) {
+      const s = sessionDemo(p.token);
       const db = lireDemo();
       const b = db.besoins.find(function (x) { return x.id === (p.data || {}).id; });
-      if (!b || b.site !== p.profil) throw erreur('INTROUVABLE', 'Besoin introuvable.');
+      if (!b) throw erreur('INTROUVABLE', 'Besoin introuvable.');
+      if (!estMien(s, b)) throw erreur('INTERDIT', 'Vous ne pouvez retirer que vos propres besoins.');
       if (b.statut !== 'EN_ATTENTE') throw erreur('INTERDIT', 'Seuls les besoins en attente peuvent être retirés.');
       db.besoins = db.besoins.filter(function (x) { return x !== b; });
       ecrireDemo(db);
@@ -128,16 +213,21 @@
   }
 
   const envoyer = C.API_URL ? appel : demoAppel;
-  const req = function (action, s, data) {
-    return envoyer({ action: action, profil: s.profil, code: s.code, data: data });
-  };
+  const req = function (action, token, data) { return envoyer({ action: action, token: token, data: data }); };
 
   window.Store = {
     demo: !C.API_URL,
-    login: function (s) { return req('login', s); },
-    list: function (s) { return req('list', s); },
-    create: function (s, data) { return req('create', s, data); },
-    decide: function (s, data) { return req('decide', s, data); },
-    cancel: function (s, data) { return req('cancel', s, data); },
+    // Règles partagées avec l'interface (le serveur applique les mêmes).
+    estMien: estMien,
+    peutDecider: peutDecider,
+    annuaire: function () { return req('annuaire'); },
+    envoyerCode: function (d) { return req('envoyerCode', null, d); },
+    verifierCode: function (d) { return req('verifierCode', null, d); },
+    connexionSite: function (d) { return req('connexionSite', null, d); },
+    deconnexion: function (s) { return req('deconnexion', s.token); },
+    list: function (s) { return req('list', s.token); },
+    create: function (s, data) { return req('create', s.token, data); },
+    decide: function (s, data) { return req('decide', s.token, data); },
+    cancel: function (s, data) { return req('cancel', s.token, data); },
   };
 })();

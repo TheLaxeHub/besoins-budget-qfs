@@ -31,28 +31,71 @@
     <div class="lg-card">
       <div class="lg-conf" id="lgDemo" hidden>
         <b>Mode démonstration</b>
-        L'application n'est pas encore reliée au Google Sheet : les saisies restent dans ce navigateur. Pour la mise en ligne, renseignez <code>API_URL</code> dans <code>assets/js/config.js</code> (voir le README).
+        L'application n'est pas encore reliée au Google Sheet : les saisies restent dans ce navigateur et le code de connexion s'affiche à l'écran au lieu d'être envoyé par e-mail.
       </div>
 
-      <div id="lgStep1">
+      <ol class="lg-stp" id="lgSteps">
+        <li data-s="1"><span>1</span>Poste</li>
+        <li data-s="2"><span>2</span>Site</li>
+        <li data-s="3"><span>3</span>Accès</li>
+      </ol>
+
+      <!-- Étape 1 : poste -->
+      <div id="lgPoste">
+        <h2 class="lg-q">Quel est votre poste ?</h2>
+        <p class="lg-h">Choisissez votre poste pour accéder à la plateforme.</p>
+        <div class="lg-sep"><span>En agence</span></div>
+        <div class="lg-roles" id="lgRolesSite"></div>
+        <div class="lg-sep"><span>Au siège</span></div>
+        <div class="lg-roles" id="lgRolesSiege"></div>
+      </div>
+
+      <!-- Étape 2 : site -->
+      <div id="lgSite" hidden>
+        <button type="button" class="lg-back" data-back="1"><i data-lucide="arrow-left"></i> Changer de poste</button>
+        <h2 class="lg-q">Votre site</h2>
+        <p class="lg-h" id="lgSiteH"></p>
+        <div id="lgSiteSiege" hidden>
+          <button type="button" class="lg-bo" id="lgSiegeOk">
+            <span class="lg-bo-i"><i data-lucide="building-2"></i></span>
+            <span class="lg-bo-t"><span data-cfg="SITE_SIEGE"></span><small>Les postes du siège sont rattachés au SIEGE</small></span>
+            <i data-lucide="chevron-right" class="lg-bo-a"></i>
+          </button>
+        </div>
+        <div id="lgSiteListe" hidden>
+          <div class="sbx lg-sbx"><i data-lucide="search" class="si"></i><input id="lgSearch" type="search" placeholder="Rechercher votre site (Bouaké, Abobo, Barrage…)" autocomplete="off" aria-label="Rechercher un site"></div>
+          <div class="lg-grid" id="lgGrid"></div>
+        </div>
+      </div>
+
+      <!-- Étape 3 : identité -->
+      <div id="lgQui" hidden>
+        <button type="button" class="lg-back" data-back="2"><i data-lucide="arrow-left"></i> Changer de site</button>
         <h2 class="lg-q">Qui êtes-vous ?</h2>
-        <p class="lg-h">Sélectionnez votre site, ou le Back Office.</p>
-        <button type="button" class="lg-bo" id="lgBo">
-          <span class="lg-bo-i"><i data-lucide="shield-check"></i></span>
-          <span class="lg-bo-t">Back Office<small>Validation des besoins et consolidation de tous les sites</small></span>
-          <i data-lucide="chevron-right" class="lg-bo-a"></i>
-        </button>
-        <div class="lg-sep"><span>Sites</span></div>
-        <div class="sbx lg-sbx"><i data-lucide="search" class="si"></i><input id="lgSearch" type="search" placeholder="Rechercher votre site (Bouaké, Abobo, Barrage…)" autocomplete="off" aria-label="Rechercher un site"></div>
-        <div class="lg-grid" id="lgGrid"></div>
+        <p class="lg-h" id="lgQuiH"></p>
+        <form id="lgNomForm" hidden>
+          <label class="fl" for="lgNom">Votre nom et prénom</label>
+          <input class="in" id="lgNom" autocomplete="name" placeholder="Ex. : Kouassi Aya">
+          <button class="btn bp lg-go" type="submit"><i data-lucide="log-in"></i> Accéder à la plateforme</button>
+        </form>
+        <div class="lg-grid lg-people" id="lgPeople" hidden></div>
       </div>
 
-      <form id="lgStep2" hidden>
-        <button type="button" class="lg-back" id="lgBack"><i data-lucide="arrow-left"></i> Choisir un autre profil</button>
-        <div class="lg-who" id="lgWho"></div>
-        <label class="fl" for="lgCode">Code d'accès</label>
-        <input class="in" id="lgCode" type="password" autocomplete="current-password" required>
-        <button class="btn bp lg-go" type="submit"><i data-lucide="log-in"></i> Se connecter</button>
+      <!-- Étape 3 bis : code reçu par e-mail -->
+      <form id="lgOtp" hidden autocomplete="off">
+        <button type="button" class="lg-back" data-back="3"><i data-lucide="arrow-left"></i> Ce n'est pas moi</button>
+        <div class="lg-who" id="lgOtpWho"></div>
+        <p class="lg-h lg-left" id="lgOtpH"></p>
+        <div class="otp" id="otpBox">
+          <input inputmode="numeric" maxlength="1" aria-label="Chiffre 1">
+          <input inputmode="numeric" maxlength="1" aria-label="Chiffre 2">
+          <input inputmode="numeric" maxlength="1" aria-label="Chiffre 3">
+          <input inputmode="numeric" maxlength="1" aria-label="Chiffre 4">
+        </div>
+        <div class="otp-t" id="otpTimer"></div>
+        <div class="otp-demo" id="otpDemo" hidden></div>
+        <button class="btn bp lg-go" type="submit" id="otpGo"><i data-lucide="log-in"></i> Valider et accéder</button>
+        <button type="button" class="lg-renvoi" id="otpRenvoi"><i data-lucide="refresh-cw"></i> Générer un nouveau code</button>
       </form>
 
       <div class="lg-err" id="lgErr" role="alert"></div>
@@ -69,9 +112,9 @@
       <a href="#sec-kpi" class="sb-a"><i data-lucide="layout-dashboard"></i>Tableau de bord</a>
       <a href="#sec-reg" class="sb-a"><i data-lucide="list-checks"></i><span id="sbReg">Registre</span></a>
       <a href="#sec-synth" class="sb-a bo-only"><i data-lucide="building-2"></i>Synthèse par site</a>
-      <a href="#sec-art" class="sb-a"><i data-lucide="package"></i>Articles consolidés</a>
+      <a href="#sec-art" class="sb-a bo-only"><i data-lucide="package"></i>Articles consolidés</a>
       <a href="#sec-alertes" class="sb-a"><i data-lucide="bell"></i>Points d'attention</a>
-      <button type="button" class="sb-a pdv-only" id="sbNew"><i data-lucide="circle-plus"></i>Exprimer un besoin<span class="sb-n" id="sbCart" hidden></span></button>
+      <button type="button" class="sb-a" id="sbNew"><i data-lucide="circle-plus"></i>Exprimer un besoin<span class="sb-n" id="sbCart" hidden></span></button>
     </nav>
     <div class="sb-foot">
       <div class="sb-user">
@@ -106,9 +149,9 @@
           </div>
         </div>
         <div class="pg-act">
-          <button type="button" class="btn bo" id="btnXlsx" title="Exporter en Excel"><i data-lucide="file-spreadsheet"></i>Excel</button>
+          <button type="button" class="btn bo bo-only" id="btnXlsx" title="Exporter en Excel les besoins validés"><i data-lucide="file-spreadsheet"></i>Excel</button>
           <button type="button" class="btn bo" id="btnPrint" title="Imprimer ou enregistrer en PDF"><i data-lucide="printer"></i>PDF</button>
-          <button type="button" class="btn bp pdv-only" id="btnNew"><i data-lucide="plus"></i>Exprimer un besoin</button>
+          <button type="button" class="btn bp" id="btnNew"><i data-lucide="plus"></i>Exprimer un besoin</button>
         </div>
       </header>
 
@@ -130,6 +173,15 @@
         <div class="fg" id="fDates" hidden>
           <label>Du … au</label>
           <div class="fdates"><input type="date" id="fDu" class="in" aria-label="Du"><input type="date" id="fAu" class="in" aria-label="Au"></div>
+        </div>
+        <div class="fg bo-only">
+          <label for="fVue">Afficher</label>
+          <select id="fVue" class="in">
+            <option value="a_valider">Besoins que je valide</option>
+            <option value="valides_moi">Validés par moi</option>
+            <option value="mes">Mes propres besoins</option>
+            <option value="tout">Tous les besoins visibles</option>
+          </select>
         </div>
         <div class="fg bo-only">
           <label for="fSite">Site</label>
@@ -205,7 +257,7 @@
             <table class="tbl">
               <thead><tr>
                 <th class="bo-only ck"><input type="checkbox" id="ckAll" aria-label="Tout sélectionner"></th>
-                <th>N°</th><th>Saisi le</th><th class="bo-only">Site</th><th>Catégorie</th><th>Article</th>
+                <th>N°</th><th>Saisi le</th><th class="bo-only">Site / demandeur</th><th>Catégorie</th><th>Article</th>
                 <th class="num">Qté</th><th>Type</th><th>Bénéficiaire</th><th>Motif</th><th>Statut</th><th class="num">Qté validée</th>
               </tr></thead>
               <tbody id="tbody"></tbody>
@@ -234,7 +286,7 @@
       </section>
 
       <!-- Articles consolidés -->
-      <section id="sec-art">
+      <section id="sec-art" class="bo-only">
         <div class="sh"><h2 class="sh-t">Articles consolidés</h2><span class="sh-r" id="artSub">Liste d'achat — hors rejets</span></div>
         <div class="card">
           <div class="tcl"><div class="chips" id="artChips"></div><span class="rc" id="artRc"></span></div>
@@ -337,8 +389,7 @@
         <p class="nstep-h">Votre besoin a été ajouté au panier. Ajoutez-en d'autres ou envoyez le tout au Back Office.</p>
         <div id="nCart"></div>
         <button type="button" class="add-more" id="nAddMore"><i data-lucide="plus"></i>Ajouter un autre besoin</button>
-        <label class="fl" for="nDem">Votre nom (demandeur) *</label>
-        <input class="in" id="nDem" placeholder="Nom et prénom" autocomplete="name">
+        <div class="n-who" id="nWho"></div>
       </section>
 
       <div class="lg-err" id="nErr" role="alert"></div>

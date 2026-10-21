@@ -13,61 +13,77 @@ window.APP_CONFIG = {
   // Date limite de saisie affichée aux sites (format AAAA-MM-JJ, vide = pas de date limite).
   DATE_LIMITE: '',
 
-  BACK_OFFICE: 'BACK OFFICE',
-
-  // Sites de déploiement. Pour un nouveau site, ajoutez-le aussi dans l'onglet « Acces » de la feuille.
+  // Sites de déploiement (choisis par les caissières). Les postes du siège sont rattachés à SITE_SIEGE.
+  // À garder identique à SITES dans apps-script/Code.gs.
+  SITE_SIEGE: 'SIEGE',
   SITES: [
-    'SIEGE', 'CGI ABOBO', 'CGI ABOISSO', 'CGI AGBOVILLE', 'CGI ANGRE', 'CGI BONDOUKOU',
-    'CGI BONGOUANOU', 'CGI BOUAKE', 'CGI BOUNA', 'CGI BOUNDIALI', 'CGI COSMOS', 'CGI DAOUKRO',
-    'CGI DIMBOKRO', 'CGI DIVO', 'CGI FERKE', 'CGI GUIGLO', 'CGI KONG', 'CGI MANKONO',
-    'CGI ODIENNE', 'CGI PHB', 'CGI SASSANDRA', 'CGI SEGUELA', 'CGI TOUBA', 'CGI VGE',
-    'CGI YOPOUGON', 'FOURRIERE ABOBO', 'FOURRIERE BASSAM', 'BARRAGE GSR1', 'BARRAGE GSR2',
-    'BARRAGE GSR3', 'BARRAGE PSSR1', 'BARRAGE PSSR2',
+    'SIEGE', 'ABOBO', 'ABOISSO', 'AGBOVILLE', 'ANGRE', 'BONDOUKOU', 'BONGOUANOU', 'BOUAKE',
+    'BOUNA', 'BOUNDIALI', 'COSMOS', 'DAOUKRO', 'DIMBOKRO', 'DIVO', 'FERKE', 'GUIGLO', 'KONG',
+    'MANKONO', 'ODIENNE', 'PHB', 'SASSANDRA', 'SEGUELA', 'TOUBA', 'VGE', 'YOPOUGON',
+    'FOURRIERE ABOBO', 'FOURRIERE BASSAM', 'BARRAGE GSR1', 'BARRAGE GSR2', 'BARRAGE GSR3',
+    'BARRAGE PSSR1', 'BARRAGE PSSR2',
   ],
 
+  // Postes proposés à la connexion (1re étape).
+  //  - siege: false → l'agent choisit son site puis saisit son nom (pas de code).
+  //  - siege: true  → site SIEGE, l'agent choisit son nom et reçoit un code à 4 chiffres par e-mail.
+  // `personnes` ne sert qu'au MODE DÉMONSTRATION : en ligne, la liste (avec les e-mails) vient de
+  // l'onglet « Personnes » de la feuille Google Sheets.
+  POSTES: [
+    { libelle: 'Caissière ordinaire', siege: false, ico: 'user-round', aide: 'En agence' },
+    { libelle: 'Caissière E-money', siege: false, ico: 'smartphone', aide: 'En agence' },
+    { libelle: 'Opérateur', siege: true, ico: 'headset', aide: 'Siège', personnes: ['Isaac Kone', 'Yasmine Kamagate', 'Anne Adjo'] },
+    { libelle: 'Assistant', siege: true, ico: 'clipboard-list', aide: 'Siège', personnes: ['Aminata Sow', 'Kady Bakayoko'] },
+    { libelle: 'Chef', siege: true, ico: 'user-cog', aide: 'Siège', personnes: ['Axel Kouamenan', 'Kader Soro'] },
+    { libelle: 'Responsable', siege: true, ico: 'shield-check', aide: 'Siège · valide', personnes: ['Zeinab Kone', 'Yaya Comara', 'Massandje Dagnoko', 'Rita Kessie'] },
+    { libelle: 'Manager', siege: true, ico: 'crown', aide: 'Siège · valide', personnes: ['Issa Kone', 'Jansenus Koffi'] },
+  ],
+
+  // Qui valide les besoins de qui (poste du demandeur → poste du valideur).
+  // À garder identique à VALIDATION dans apps-script/Code.gs.
+  VALIDATION: {
+    'Caissière ordinaire': 'Responsable',
+    'Caissière E-money': 'Responsable',
+    'Chef': 'Responsable',
+    'Opérateur': 'Responsable',
+    'Assistant': 'Responsable',
+    'Responsable': 'Manager',
+    'Manager': 'Manager',
+  },
+
+  OTP_MINUTES: 5,                // validité du code envoyé par e-mail
+
+  // Tous les types de besoin (filtres, graphiques). Chaque catégorie précise ceux qu'elle propose.
   TYPES_BESOIN: ['Nouvelle Acquisition', 'Remplacement Équipement Défectueux', 'Renouvellement'],
 
-  // Catégories de besoins et articles proposés (« Autre (préciser) » est toujours ajouté).
+  // Catégories de besoins, types proposés et articles (« Autre (préciser) » est toujours ajouté).
   // À garder identique à CATEGORIES dans apps-script/Code.gs (codes uniquement).
   CATEGORIES: [
     {
       code: 'INFORMATIQUE', libelle: 'Informatique', ico: 'monitor', couleur: '#1d4ed8',
-      aide: 'Ordinateurs, impression, réseau, téléphonie…',
+      aide: 'Ordinateurs, impression, réseau, stockage…',
+      types: ['Nouvelle Acquisition', 'Remplacement Équipement Défectueux'],
       articles: [
-        'Ordinateur Portable', 'Ordinateur de Bureau', 'Unité Centrale', 'Écran Ordinateur de Bureau',
-        'Écran Télévision', 'Clavier', 'Souris', 'Batterie Ordinateur Portable',
-        'Chargeur de Batterie Ordinateur Portable', 'Licence Microsoft Office', 'Imprimante',
-        'Imprimante Multifonctions', 'Photocopieur', 'Scanner', 'Scanner à Feuilles', 'Scanner à Plat',
-        "Tête d'Impression", 'Rouleau de Nettoyage', 'Tige de Rouleau de Nettoyage', 'Onduleur',
-        'Multiprise', 'Rallonge USB', 'Splitter HDMI', 'Support Fixation Écran', 'Support',
-        'Rouleau Câble Électrique', 'Rouleau Câble Réseau', 'Spirale de Protection Câble', 'Routeur',
-        'Switch', 'Wibox Internet', 'Pocket Wifi', 'Puce Téléphonique', 'Serveur Rackable',
-        'Serveur Non Rackable', 'Téléphone IP', 'Téléphone Portable', 'Téléphone Android', 'Tablette',
-        'Protection Écran Téléphone', 'Protection Écran Tablette', 'Fourreau Téléphone',
-        'Fourreau Tablette', 'Détecteur de Faux Billets', 'Souffleur', 'Tableau à Marqueur Effaçable',
-        'Support et Maintenance',
+        'Batterie Ordinateur Portable', 'Chargeur de Batterie Ordinateur Portable', 'Clavier',
+        'Disque de stockage', 'Écran Ordinateur de Bureau', 'Imprimante', 'Multiprise', 'Onduleur',
+        'Ordinateur Portable', 'Pocket Wifi', 'Scanner', 'Serveur', 'Souris',
+        'Support Ordinateur Portable', 'Unité Centrale Ordinateur de Bureau',
       ],
     },
     {
       code: 'MOBILIER', libelle: 'Mobilier', ico: 'armchair', couleur: '#9333ea',
-      aide: 'Fauteuils, bureaux, rangements, électroménager…',
-      articles: [
-        'Fauteuil analyste/agent', 'Fauteuil de direction', 'Fauteuil orthopédique',
-        'Chaise visiteur PVC noir', 'Chaises Malaga', 'Chaises pliantes', 'Siège caissière',
-        'Bureau analyste/agent', 'Bureau avec caisson fixe', 'Bureau avec retour', 'Box (bureau)',
-        'Caisson', 'Armoire de rangement', 'Tiroirs agents avec clé', 'Caissette',
-        'Réfrigérateur petit format', 'Micro-onde', 'Combiné téléphonique', "Bonbonne d'eau",
-        'Paperboard',
-      ],
+      aide: 'Sièges, bureaux, caissons, caissettes…',
+      types: ['Nouvelle Acquisition', 'Remplacement Équipement Défectueux', 'Renouvellement'],
+      articles: ['Bureau', 'Caisson', 'Caissette', 'Siège'],
     },
     {
       code: 'ACHATS', libelle: 'Achats', ico: 'shopping-cart', couleur: '#0891b2',
-      aide: 'Sécurité, tenues, signalétique, accessoires…',
+      aide: 'Sécurité, téléphonie, tenues, accessoires…',
+      types: ['Nouvelle Acquisition', 'Remplacement Équipement Défectueux', 'Renouvellement'],
       articles: [
-        'Détecteur de faux billets', 'Coffre-fort', 'Chasubles', 'Polos', 'Tee-shirts', 'Kakemono',
-        'Affiches autocollantes A1', 'Affiches autocollantes grand format', 'Téléphone Android',
-        'Tablette', 'Protection écran téléphone', 'Protection écran tablette', 'Fourreau téléphone',
-        'Fourreau tablette',
+        'Chasubles', 'Coffre-fort', 'Détecteur de faux billets', 'Fourreau tablette',
+        'Fourreau téléphone', 'Protection écran tablette', 'Protection écran téléphone', 'Tablette',
+        'Téléphone Android',
       ],
     },
   ],
