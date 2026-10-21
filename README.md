@@ -33,23 +33,23 @@ La session reste ouverte sur l'appareil jusqu'à « Se déconnecter » (6 h maxi
 
 Massandje Dagnoko et Rita Kessie sont Responsables mais ne valident pas : elles expriment leurs besoins, qui sont validés par les Managers. Un responsable ne valide jamais ses propres besoins. Le réglage se trouve dans `VALIDEURS` (`config.js` et `Code.gs`) : une personne ajoutée dans l'onglet `Personnes` doit aussi y être rattachée à un valideur.
 
-### Saisie (tous les postes)
-- **Exprimer un besoin**, depuis la barre latérale, avec un assistant en 4 étapes :
-  1. **Catégorie** : Informatique, Mobilier ou Achats.
-  2. **Article** : type de besoin, article (ou « Autre (préciser) »), quantité, caractéristiques.
-  3. **Motif** : la justification du besoin, obligatoire. Pour un *Remplacement d'équipement défectueux* ou un *Renouvellement*, l'étape 2 demande aussi l'**année d'acquisition** et l'**état de l'équipement actuel** (Hors service, En panne (réparable), Défectueux / fonctionne mal, Usé / vétuste, Fonctionnel).
-  4. **Panier et envoi** : on ajoute autant de lignes que nécessaire, puis on envoie tout en une fois. Le nom, le poste et le site viennent de la connexion. Chaque envoi reçoit une référence (`B27-0001`).
-- **Suivi** : les caissières voient les besoins des caissières de leur site, les autres postes voient leurs propres besoins. Un besoin encore en attente peut être retiré par son auteur.
+### Écrans
 
-### Validation (Responsables et Managers)
-- **Filtres** : affichage (besoins que je valide, validés par moi, mes propres besoins, tous), site, catégorie, type de besoin.
-- **Décision** : Valider (quantité validée modifiable), Rejeter (commentaire obligatoire) ou Remettre en attente. La décision est enregistrée au nom de la personne connectée.
-- **Décision groupée** : cocher plusieurs lignes, puis les valider ou les rejeter en une fois.
-- **Synthèse par site** et **articles consolidés**.
-- **Export Excel** (toujours complet, sans tenir compte des filtres de l'écran) :
-  - **Responsable** : les besoins qu'**il a validés**.
-  - **Manager** : les besoins validés par **les responsables et les managers** (dont lui-même).
-  - Le fichier contient trois onglets : Besoins validés, Articles consolidés, Synthèse par site.
+Chacun arrive directement sur ce qu'il vient faire :
+
+| Écran | Pour qui | Contenu |
+|---|---|---|
+| **Exprimer un besoin** | Tous (écran d'accueil des agents) | Catalogue d'articles par catégorie (Informatique, Mobilier, Achats) avec recherche. Un clic ajoute l'article à **Ma demande**, à droite. Chaque ligne se complète sur place : quantité, type de besoin, équipement actuel si besoin, motif (avec motifs proposés en un clic), caractéristiques facultatives. Une ligne incomplète est signalée en orange. L'envoi n'est possible que lorsque tout est complet. La demande en cours est conservée sur l'appareil. |
+| **Mes besoins** / **Besoins du site** | Tous | Les demandes regroupées par référence, avec le statut de chaque ligne, la quantité validée, le nom du valideur et le motif en cas de rejet. Un besoin encore en attente peut être retiré. |
+| **À valider** | Zeinab Kone, Yaya Comara, Managers (écran d'accueil) | Les demandes regroupées par demandeur. Pour chaque ligne : motif, équipement actuel, quantité validée modifiable, boutons **Valider** et **Rejeter** (le motif du rejet est obligatoire). **Tout valider** traite une demande en un clic. L'onglet *Déjà traités* permet de revenir sur une décision. |
+| **Tableau de bord** | Valideurs | Indicateurs, graphiques, registre complet avec décision groupée, synthèse par site, articles consolidés. |
+
+Pour un *Remplacement d'équipement défectueux* ou un *Renouvellement*, l'**année d'acquisition** et l'**état de l'équipement actuel** sont obligatoires (états : Hors service, En panne (réparable), Défectueux / fonctionne mal, Usé / vétuste, Fonctionnel).
+
+### Export Excel (valideurs)
+- **Responsable** : les besoins qu'**il a validés**.
+- **Manager** : les besoins validés par **les responsables et les managers** (dont lui-même).
+- L'export est toujours complet (sans tenir compte des filtres de l'écran). Il contient trois onglets : Besoins validés, Articles consolidés, Synthèse par site.
 
 ### Pour tous
 - Utilisable sur ordinateur et sur téléphone.

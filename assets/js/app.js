@@ -33,6 +33,7 @@
     minuteur: null,
     synchro: null,
     panier: [],
+    vue: null,
   };
 
   /* ================= Utilitaires ================= */
@@ -329,7 +330,11 @@
     memoire.ecrire(CLE_SESSION, sess);
     document.body.className = estBO() ? 'is-bo' : 'is-pdv';
     S.filtres = Object.assign({}, FILTRES_DEFAUT, { vue: estBO() ? 'a_valider' : 'tout' });
-    S.panier = memoire.lire(clePanier()) || [];
+    S.panier = (memoire.lire(clePanier()) || []).filter(function (l) { return l && l.uid; });
+    S.vue = null;
+    NV.envoye = null; NV.cat = CATS[0].code; NV.q = '';
+    MES.statut = ''; MES.q = '';
+    VAL.onglet = 'attente'; VAL.site = ''; VAL.cat = ''; VAL.q = '';
     $('#login').hidden = true;
     $('#app').hidden = false;
     initApp();
@@ -337,20 +342,22 @@
     clearInterval(S.minuteur);
     if (!Store.demo && C.ACTUALISATION_SECONDES > 0) {
       S.minuteur = setInterval(function () {
-        if (!document.hidden && $('#mNew').hidden && !S.ouvert) actualiser(true);
+        const actif = document.activeElement;
+        const enSaisie = actif && /INPUT|TEXTAREA|SELECT/.test(actif.tagName) && actif.closest('.main');
+        if (!document.hidden && !S.ouvert && !enSaisie) actualiser(true);
       }, C.ACTUALISATION_SECONDES * 1000);
     }
   }
 
   function deconnecter(message) {
     clearInterval(S.minuteur);
-    fermerSaisie();
     if (S.session && !message) Store.deconnexion(S.session).catch(function () { /* déjà expirée */ });
     memoire.effacer(CLE_SESSION);
     fermerPanneau();
     S.session = null;
     S.besoins = [];
     S.selection = {};
+    S.premierChargement = false;
     S.filtres = Object.assign({}, FILTRES_DEFAUT);
     afficherConnexion();
     window.scrollTo(0, 0);
@@ -369,10 +376,7 @@
     $('#sbAv').className = 'sb-av' + (bo ? ' bo' : '');
     $('#sbName').textContent = ss.nom;
     $('#sbRole').textContent = ss.poste + ' · ' + ss.site;
-    $('#sbReg').textContent = bo ? 'Besoins à valider' : caisse ? 'Besoins du site' : 'Mes besoins';
-    $('#bcWho').textContent = ss.nom + ' · ' + ss.poste;
-    $('#pgIco').innerHTML = ico((posteDef(ss.poste) || {}).ico || 'user');
-    $('#pgEyebrow').textContent = 'E-Money · ' + ss.poste + ' · ' + ss.site;
+    $('#sbMes').textContent = caisse ? 'Besoins du site' : 'Mes besoins';
     $('#regTitle').textContent = bo
       ? (estManager() ? 'Besoins — validation des responsables et des managers' : 'Besoins — validation ' + ss.nom)
       : caisse ? 'Besoins des caissières — ' + ss.site : 'Mes besoins';
@@ -390,9 +394,26 @@
     $('#fType').innerHTML = '<option value="">Tous</option>' +
       C.TYPES_BESOIN.map(function (t) { return '<option>' + esc(t) + '</option>'; }).join('');
     synchroniserFiltres();
+    ['#nvSearch', '#mesSearch', '#valSearch'].forEach(function (k) { $(k).value = ''; });
+    $('#valSite').value = ''; $('#valCat').value = '';
+    rendreNouveau();
+    allerVue(bo ? 'valider' : 'nouveau');
 
     if (appInitialisee) return;
     appInitialisee = true;
+    initNouveau();
+    initMes();
+    initValider();
+    $('#sbNav').addEventListener('click', function (e) {
+      const b = e.target.closest('[data-view]');
+      if (b) allerVue(b.dataset.view);
+    });
+    document.addEventListener('click', function (e) {
+      const g = e.target.closest('[data-goto]');
+      if (g) allerVue(g.dataset.goto);
+      const x = e.target.closest('[data-export]');
+      if (x) exporterExcel();
+    });
 
     const surFiltre = function () { S.limite = PAR_PAGE; rendre(); };
     $('#fVue').addEventListener('change', function (e) { S.filtres.vue = e.target.value; S.selection = {}; surFiltre(); });
@@ -461,27 +482,16 @@
       rendreTable(filtrer());
       document.getElementById('sec-reg').scrollIntoView({ behavior: 'smooth' });
     });
-    $('#sbNew').addEventListener('click', function () { menu(false); ouvrirSaisie(); });
     $('#sbToggle').addEventListener('click', function () { menu(!document.body.classList.contains('sb-open')); });
     $('#sbOv').addEventListener('click', function () { menu(false); });
-    $('#sbNav').addEventListener('click', function (e) {
-      const a = e.target.closest('a.sb-a');
-      if (!a) return;
-      $$('#sbNav .sb-a').forEach(function (x) { x.classList.toggle('on', x === a); });
-      menu(false);
-    });
     $('#btnRefresh').addEventListener('click', function () { actualiser(); });
-    $('#btnXlsx').addEventListener('click', exporterExcel);
     $('#btnLogout').addEventListener('click', function () { deconnecter(); });
 
     $('#ov').addEventListener('click', fermerPanneau);
     $('#pClose').addEventListener('click', fermerPanneau);
     document.addEventListener('keydown', function (e) {
-      if (e.key !== 'Escape') return;
-      if (!$('#mNew').hidden) fermerSaisie();
-      else fermerPanneau();
+      if (e.key === 'Escape') fermerPanneau();
     });
-    initSaisie();
   }
 
   function menu(ouvert) { document.body.classList.toggle('sb-open', ouvert); }
@@ -514,11 +524,16 @@
       const r = await Store.list(S.session);
       S.besoins = r.besoins || [];
       S.synchro = new Date();
+      if (!S.premierChargement) {
+        S.premierChargement = true;
+        if (!estBO() && !S.panier.length && S.besoins.some(estMien)) S.vue = 'mes';
+      }
       Object.keys(S.selection).forEach(function (id) {
         const b = parId(id);
         if (!b || b.statut !== 'EN_ATTENTE' || !peutDecider(b)) delete S.selection[id];
       });
       rendre();
+      if (S.vue) allerVueSilencieux(S.vue);
       if (S.ouvert && S.ouvert !== '__groupe__') rendrePanneau();
     } catch (err) {
       if (err.code === 'SESSION_EXPIREE') {
@@ -597,6 +612,8 @@
     rendreTable(liste);
     if (estBO()) rendreSynthese(filtrer({ ignorerSite: true }));
     rendreArticles(liste);
+    rendreMes();
+    rendreValider();
     icones();
   }
 
@@ -998,194 +1015,358 @@
     }
   }
 
-  /* ================= Saisie des besoins (assistant + panier) ================= */
+  /* ================= Navigation entre les vues ================= */
 
-  const N = { etape: 1, cat: '', type: '' };
-  const avecEquipement = function () { return C.TYPES_EQUIPEMENT_ACTUEL.indexOf(N.type) >= 0; };
+  const VUES = {
+    nouveau: 'Exprimer un besoin',
+    mes: 'Mes besoins',
+    valider: 'À valider',
+    tdb: 'Tableau de bord',
+  };
 
-  function initSaisie() {
-    $('#nCats').innerHTML = CATS.map(function (c) {
-      return '<label style="--catc:' + c.couleur + '"><input type="radio" name="ncat" value="' + esc(c.code) + '"><span>' + ico(c.ico) +
-        '<b>' + esc(c.libelle) + '</b><small>' + esc(c.aide) + '</small><small class="n-art">' + c.articles.length + ' articles proposés</small></span></label>';
+  function allerVueSilencieux(v) {
+    if ($('.view[data-view="' + v + '"]').hidden) allerVue(v);
+  }
+
+  function allerVue(v) {
+    if (!estBO() && (v === 'valider' || v === 'tdb')) v = 'nouveau';
+    S.vue = v;
+    $$('.view').forEach(function (s) { s.hidden = s.dataset.view !== v; });
+    $$('#sbNav [data-view]').forEach(function (b) { b.classList.toggle('on', b.dataset.view === v); });
+    $('#bcVue').textContent = v === 'mes' ? $('#sbMes').textContent : VUES[v];
+    menu(false);
+    window.scrollTo(0, 0);
+    if (v === 'nouveau') majBarreMobile();
+    if (v === 'tdb') Object.keys(S.charts).forEach(function (k) { S.charts[k].resize(); });
+    icones();
+  }
+
+  const ICONES_ARTICLES = [
+    [/portable/i, 'laptop'], [/unit[ée] centrale|bureau$/i, 'cpu'], [/[ée]cran/i, 'monitor'], [/clavier/i, 'keyboard'],
+    [/souris/i, 'mouse'], [/batterie/i, 'battery-charging'], [/chargeur/i, 'plug-zap'], [/imprimante/i, 'printer'],
+    [/scanner/i, 'scan-line'], [/serveur/i, 'server'], [/disque|stockage/i, 'hard-drive'], [/onduleur/i, 'zap'],
+    [/multiprise/i, 'plug'], [/wifi/i, 'wifi'], [/support/i, 'laptop'],
+    [/^bureau/i, 'lamp-desk'], [/caisson/i, 'archive'], [/caissette/i, 'box'], [/si[èe]ge|chaise|fauteuil/i, 'armchair'],
+    [/chasuble|polo|tee/i, 'shirt'], [/coffre/i, 'vault'], [/billet/i, 'banknote'], [/tablette/i, 'tablet'],
+    [/t[ée]l[ée]phone|fourreau|protection/i, 'smartphone'],
+  ];
+  const icoArticle = function (lib, catCode) {
+    const t = ICONES_ARTICLES.find(function (x) { return x[0].test(lib); });
+    return t ? t[1] : cat(catCode).ico || 'package';
+  };
+  const teinte = function (c) { return 'color-mix(in srgb,' + c + ' 11%,#fff)'; };
+
+  /* ================= Vue « Exprimer un besoin » : catalogue + demande ================= */
+
+  const NV = { cat: CATS[0].code, q: '', envoye: null };
+  const avecEquipement = function (l) { return C.TYPES_EQUIPEMENT_ACTUEL.indexOf(l.type_besoin) >= 0; };
+  const manques = function (l) {
+    const m = [];
+    if (!String(l.libelle || '').trim()) m.push("l'article");
+    if (!(Number(l.quantite) > 0)) m.push('la quantité');
+    if (!l.type_besoin) m.push('le type');
+    if (avecEquipement(l)) {
+      const a = Number(l.annee_acquisition);
+      if (!(a >= 1980 && a <= new Date().getFullYear())) m.push("l'année d'acquisition");
+      if (!l.etat_actuel) m.push("l'état actuel");
+    }
+    if (!String(l.motif || '').trim()) m.push('le motif');
+    return m;
+  };
+
+  function initNouveau() {
+    $('#nvCats').addEventListener('click', function (e) {
+      const b = e.target.closest('[data-cat]');
+      if (!b) return;
+      NV.cat = b.dataset.cat;
+      NV.q = '';
+      $('#nvSearch').value = '';
+      rendreCatalogue();
+    });
+    $('#nvSearch').addEventListener('input', function (e) { NV.q = e.target.value; rendreCatalogue(); });
+    $('#nvTiles').addEventListener('click', function (e) {
+      const t = e.target.closest('[data-art]');
+      if (t) ajouterArticle(t.dataset.cat, t.dataset.art === AUTRE ? '' : t.dataset.art, t.dataset.art === AUTRE);
+    });
+    $('#demVider').addEventListener('click', function () {
+      if (!window.confirm('Retirer toutes les lignes de votre demande ?')) return;
+      S.panier = [];
+      sauverPanier();
+      rendreNouveau();
+    });
+    $('#demEnvoyer').addEventListener('click', envoyerDemande);
+    $('#nvBar').addEventListener('click', function () { $('#nvDem').scrollIntoView({ behavior: 'smooth', block: 'start' }); });
+    window.addEventListener('resize', majBarreMobile);
+
+    const box = $('#demLignes');
+    box.addEventListener('click', function (e) {
+      const el = e.target.closest('[data-act]');
+      if (!el) return;
+      const ligne = e.target.closest('[data-uid]');
+      const l = ligne && S.panier.find(function (x) { return String(x.uid) === ligne.dataset.uid; });
+      const act = el.dataset.act;
+      if (act === 'nouvelle') { NV.envoye = null; rendreNouveau(); return; }
+      if (act === 'voir-mes') { NV.envoye = null; rendreNouveau(); allerVue('mes'); return; }
+      if (!l) return;
+      if (act === 'rm') { S.panier = S.panier.filter(function (x) { return x !== l; }); sauverPanier(); rendreNouveau(); return; }
+      if (act === 'moins' || act === 'plus') {
+        l.quantite = Math.max(1, (parseInt(l.quantite, 10) || 1) + (act === 'plus' ? 1 : -1));
+        ligne.querySelector('[data-f="quantite"]').value = l.quantite;
+        sauverPanier(); majEtatLigne(ligne, l); majPiedDemande(); rendreCatalogue();
+        return;
+      }
+      if (act === 'type') {
+        l.type_besoin = el.dataset.v;
+        if (!avecEquipement(l)) { l.annee_acquisition = ''; l.etat_actuel = ''; }
+        sauverPanier(); remplacerLigne(ligne, l);
+        return;
+      }
+      if (act === 'motif') {
+        const m = el.dataset.v;
+        l.motif = String(l.motif || '').trim() ? String(l.motif).trim() + ' — ' + m : m;
+        ligne.querySelector('[data-f="motif"]').value = l.motif;
+        sauverPanier(); majEtatLigne(ligne, l); majPiedDemande();
+        return;
+      }
+      if (act === 'toggle') { l.open = !l.open; sauverPanier(); remplacerLigne(ligne, l); return; }
+      if (act === 'car') { l.voirCar = true; remplacerLigne(ligne, l); const i = $('[data-uid="' + l.uid + '"] [data-f="caracteristiques"]'); if (i) i.focus(); }
+    });
+    const saisie = function (e) {
+      const f = e.target.dataset.f;
+      if (!f) return;
+      const ligne = e.target.closest('[data-uid]');
+      const l = S.panier.find(function (x) { return String(x.uid) === ligne.dataset.uid; });
+      if (!l) return;
+      l[f] = f === 'quantite' ? Math.max(1, parseInt(e.target.value, 10) || 1) : e.target.value;
+      if (f === 'libelle') { const n = ligne.querySelector('.dl-n b'); if (n) n.textContent = l.libelle || 'Article à préciser'; }
+      e.target.classList.remove('err');
+      sauverPanier(); majEtatLigne(ligne, l); majPiedDemande();
+      if (f === 'quantite' || f === 'libelle') rendreCatalogue();
+    };
+    box.addEventListener('input', saisie);
+    box.addEventListener('change', saisie);
+  }
+
+  function rendreNouveau() {
+    rendreCatalogue();
+    rendreDemande();
+    majBarreMobile();
+  }
+
+  function rendreCatalogue() {
+    const dans = {};
+    S.panier.forEach(function (l) {
+      const k = l.categorie + '|' + l.libelle;
+      dans[k] = (dans[k] || 0) + (Number(l.quantite) || 0);
+    });
+    $('#nvCats').innerHTML = CATS.map(function (c) {
+      const n = S.panier.filter(function (l) { return l.categorie === c.code; }).length;
+      return '<button type="button" role="tab" class="seg-b' + (!NV.q && NV.cat === c.code ? ' on' : '') + '" data-cat="' + c.code + '" style="--c:' + c.couleur + '">' +
+        ico(c.ico) + esc(c.libelle) + (n ? '<i>' + n + '</i>' : '') + '</button>';
     }).join('');
-
-    $('#nQuick').innerHTML = C.MOTIFS_RAPIDES.map(function (m) { return '<button type="button">+ ' + esc(m) + '</button>'; }).join('');
-
-    $('#nCats').addEventListener('change', function (e) {
-      N.cat = e.target.value;
-      remplirArticles();
-      setTimeout(function () { allerA(2); }, 120);
-    });
-    $('#nTypes').addEventListener('change', function (e) {
-      N.type = e.target.value;
-      $('#nTypes').classList.remove('err');
-      $('#nEq').hidden = !avecEquipement();
-    });
-    $('#nEtat').innerHTML = '<option value="">— Sélectionner l\'état —</option>' + C.ETATS_EQUIPEMENT.map(function (e) { return '<option>' + esc(e) + '</option>'; }).join('');
-    $('#nEtat').addEventListener('change', function () { $('#nEtat').classList.remove('err'); $('#nErr').textContent = ''; });
-    $('#nAnnee').addEventListener('input', function () { $('#nErr').textContent = ''; });
-    $('#nAnnee').max = new Date().getFullYear();
-    $('#nLib').addEventListener('change', function () {
-      const autre = $('#nLib').value === AUTRE;
-      $('#nLibAutre').hidden = !autre;
-      if (autre) $('#nLibAutre').focus();
-      $('#nLib').classList.remove('err');
-    });
-    $$('.qty button').forEach(function (b) {
-      b.addEventListener('click', function () {
-        const i = $('#nQte');
-        i.value = Math.max(1, (parseInt(i.value, 10) || 1) + Number(b.dataset.q));
-        $('.qty').classList.remove('err');
+    const q = sansAccents(NV.q).trim();
+    let tuiles = [];
+    CATS.forEach(function (c) {
+      if (!q && c.code !== NV.cat) return;
+      c.articles.forEach(function (a) {
+        if (q && !sansAccents(a).includes(q)) return;
+        tuiles.push({ c: c, a: a });
       });
     });
-    $('#nQuick').addEventListener('click', function (e) {
-      const b = e.target.closest('button');
-      if (!b) return;
-      const t = $('#nMotif');
-      const m = b.textContent.slice(2);
-      t.value = t.value.trim() ? t.value.trim() + ' — ' + m : m;
-      t.classList.remove('err');
+    const tuile = function (t) {
+      const n = dans[t.c.code + '|' + t.a] || 0;
+      return '<button type="button" class="tile' + (n ? ' in' : '') + '" data-cat="' + t.c.code + '" data-art="' + esc(t.a) + '" style="--c:' + t.c.couleur + '">' +
+        '<span class="tile-ic">' + ico(icoArticle(t.a, t.c.code)) + '</span>' +
+        '<span class="tile-n">' + esc(t.a) + '</span>' +
+        (q ? '<span class="tile-c">' + esc(t.c.libelle) + '</span>' : '') +
+        '<span class="tile-a">' + (n ? ico('check') + 'Ajouté · ' + nombre(n) : ico('plus') + 'Ajouter') + '</span></button>';
+    };
+    const autres = (q ? [] : [cat(NV.cat)]).map(function (c) {
+      return '<button type="button" class="tile tile-o" data-cat="' + c.code + '" data-art="' + AUTRE + '" style="--c:' + c.couleur + '">' +
+        '<span class="tile-ic">' + ico('pencil-line') + '</span><span class="tile-n">Autre article</span>' +
+        '<span class="tile-a">' + ico('plus') + 'Préciser</span></button>';
     });
-    ['nLibAutre', 'nMotif', 'nAnnee'].forEach(function (id) {
-      $('#' + id).addEventListener('input', function () { $('#' + id).classList.remove('err'); });
-    });
-    $('#nSteps').addEventListener('click', function (e) {
-      const li = e.target.closest('li.fait');
-      if (li && N.etape < 4) allerA(Number(li.dataset.step));
-    });
-    $('#nPrev').addEventListener('click', function () {
-      if (N.etape === 1 || N.etape === 4) fermerSaisie();
-      else allerA(N.etape - 1);
-    });
-    $('#nNext').addEventListener('click', suivant);
-    $('#nAddMore').addEventListener('click', function () { nouvelleLigne(true); });
-    $('#nCart').addEventListener('click', function (e) {
-      const x = e.target.closest('[data-rm]');
-      if (!x) return;
-      S.panier.splice(Number(x.dataset.rm), 1);
-      sauverPanier();
-      rendrePanier();
-      if (!S.panier.length) nouvelleLigne(false);
-    });
-    $('#fNew').addEventListener('submit', function (e) { e.preventDefault(); envoyer(); });
-    $('#mNew').addEventListener('click', function (e) {
-      if (e.target.closest('[data-close]')) fermerSaisie();
-    });
-  }
-
-  function remplirArticles() {
-    const c = cat(N.cat);
-    $('#mNewTitle').textContent = 'Besoin ' + c.libelle;
-    N.type = '';
-    $('#nEq').hidden = true;
-    $('#nTypes').innerHTML = typesDe(N.cat).map(function (t) {
-      return '<label><input type="radio" name="ntype" value="' + esc(t) + '"><span>' + esc(t) + '</span></label>';
-    }).join('');
-    $('#nLib').innerHTML = '<option value="">— Sélectionner un article —</option>' +
-      c.articles.map(function (a) { return '<option>' + esc(a) + '</option>'; }).join('') +
-      '<option value="' + AUTRE + '">Autre (préciser)…</option>';
-    $('#nLibAutre').hidden = true;
-    $('#nLibAutre').value = '';
-  }
-
-  function ouvrirSaisie() {
-    const v = valideurTxt({ poste: S.session.poste, demandeur: S.session.nom, demandeur_id: S.session.id });
-    $('#mNewSite').textContent = S.session.site + ' · ' + C.CAMPAGNE;
-    $('#nWho').innerHTML = 'Envoyé au nom de <b>' + esc(S.session.nom) + '</b> (' + esc(S.session.poste) + ', ' + esc(S.session.site) + ') — validation par <b>' + esc(v) + '</b>.';
-    $('#mNew').hidden = false;
-    document.body.style.overflow = 'hidden';
-    if (S.panier.length) { rendrePanier(); allerA(4); } else nouvelleLigne(false);
+    $('#nvTiles').innerHTML = tuiles.length || autres.length
+      ? tuiles.map(tuile).join('') + autres.join('')
+      : '<div class="nd" style="grid-column:1/-1">' + ico('search-x') + 'Aucun article ne correspond à « ' + esc(NV.q) + ' ».</div>';
     icones();
   }
 
-  function fermerSaisie() {
-    $$('#fNew .ok-box').forEach(function (x) { x.remove(); });  // message de confirmation
-    $('#mNew').hidden = true;
-    document.body.style.overflow = '';
-  }
-
-  function nouvelleLigne(garderJustif) {
-    N.cat = ''; N.type = '';
-    $$('#nCats input, #nTypes input').forEach(function (i) { i.checked = false; });
-    $('#nLib').innerHTML = '';
-    $('#nLibAutre').hidden = true; $('#nLibAutre').value = '';
-    $('#nQte').value = 1; $('#nCar').value = '';
-    $('#nAnnee').value = ''; $('#nEtat').value = ''; $('#nEq').hidden = true;
-    if (!garderJustif) {
-      $('#nMotif').value = '';
-    }
-    $('#mNewTitle').textContent = 'Exprimer un besoin';
-    $$('#fNew .err').forEach(function (x) { x.classList.remove('err'); });
-    allerA(1);
-  }
-
-  function allerA(n) {
-    N.etape = n;
-    $('#nErr').textContent = '';
-    $$('#fNew .nstep').forEach(function (s) { s.hidden = Number(s.dataset.step) !== n; });
-    $$('#nSteps li').forEach(function (li) {
-      const k = Number(li.dataset.step);
-      li.classList.toggle('actif', k === n);
-      li.classList.toggle('fait', k < n);
-    });
-    $('#nPrev').innerHTML = n === 1 || n === 4 ? 'Fermer' : ico('arrow-left') + 'Retour';
-    $('#nNext').hidden = n === 4;
-    $('#nSubmit').hidden = n !== 4;
-    if (n === 4) $('#nSubmitTxt').textContent = 'Envoyer ' + S.panier.length + ' besoin' + (S.panier.length > 1 ? 's' : '');
-    $('#nNext').innerHTML = n === 3 ? ico('shopping-cart') + 'Ajouter au panier' : 'Suivant' + ico('arrow-right');
-    icones();
-    const focus = { 2: '#nLib', 3: '#nMotif' }[n];
-    if (focus && window.innerWidth > 700) setTimeout(function () { const el = $(focus); if (el && !el.value) el.focus(); }, 60);
-  }
-
-  function erreurSaisie(el, msg) {
-    if (el) { el.classList.add('err'); if (el.focus) el.focus(); }
-    $('#nErr').textContent = msg;
-    return false;
-  }
-
-  function verifier(n) {
-    if (n === 1) return N.cat ? true : erreurSaisie(null, 'Choisissez une catégorie.');
-    if (n === 2) {
-      if (!N.type) return erreurSaisie($('#nTypes'), 'Choisissez le type de besoin.');
-      if (!$('#nLib').value) return erreurSaisie($('#nLib'), 'Choisissez un article.');
-      if ($('#nLib').value === AUTRE && !$('#nLibAutre').value.trim()) return erreurSaisie($('#nLibAutre'), "Précisez l'article.");
-      if (!((parseInt($('#nQte').value, 10) || 0) > 0)) return erreurSaisie($('.qty'), 'La quantité doit être au moins 1.');
-      if (avecEquipement()) {
-        const a = parseInt($('#nAnnee').value, 10);
-        if (!(a >= 1980 && a <= new Date().getFullYear())) return erreurSaisie($('#nAnnee'), "Indiquez l'année d'acquisition de l'équipement actuel (1980 à " + new Date().getFullYear() + ').');
-        if (!$('#nEtat').value) return erreurSaisie($('#nEtat'), "Indiquez l'état de l'équipement actuel.");
+  function ajouterArticle(catCode, libelle, autre) {
+    if (NV.envoye) NV.envoye = null;
+    if (!autre) {
+      const ex = S.panier.find(function (l) { return l.categorie === catCode && l.libelle === libelle; });
+      if (ex) {
+        ex.open = true;
+        sauverPanier();
+        rendreDemande();
+        const el = $('[data-uid="' + ex.uid + '"]');
+        if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); el.classList.add('flash'); }
+        toast(libelle + ' est déjà dans votre demande : ajustez la quantité.');
+        return;
       }
-      return true;
     }
-    if (n === 3) {
-      if (!$('#nMotif').value.trim()) return erreurSaisie($('#nMotif'), 'Le motif est obligatoire : il sert à la validation.');
-      return true;
+    S.panier.forEach(function (l) { if (!manques(l).length) l.open = false; });
+    const l = {
+      uid: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), categorie: catCode, libelle: libelle, autre: !!autre,
+      quantite: 1, type_besoin: '', caracteristiques: '', motif: '', annee_acquisition: '', etat_actuel: '', open: true,
+    };
+    S.panier.push(l);
+    sauverPanier();
+    rendreNouveau();
+    const el = $('[data-uid="' + l.uid + '"]');
+    if (el) {
+      el.classList.add('flash');
+      if (window.innerWidth > 1024) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      const f = el.querySelector(autre ? '[data-f="libelle"]' : '.dl-types button');
+      if (f && autre) f.focus();
     }
-    return true;
   }
 
-  function suivant() {
-    if (!verifier(N.etape)) return;
-    if (N.etape < 3) { allerA(N.etape + 1); return; }
-    // Étape 3 validée : la ligne part dans le panier.
-    S.panier.push({
-      categorie: N.cat,
-      type_besoin: N.type,
-      libelle: $('#nLib').value === AUTRE ? $('#nLibAutre').value.trim() : $('#nLib').value,
-      quantite: parseInt($('#nQte').value, 10),
-      caracteristiques: $('#nCar').value.trim(),
-      motif: $('#nMotif').value.trim(),
-      annee_acquisition: avecEquipement() ? parseInt($('#nAnnee').value, 10) : '',
-      etat_actuel: avecEquipement() ? $('#nEtat').value : '',
+  function htmlLigne(l) {
+    const c = cat(l.categorie);
+    const m = manques(l);
+    const ok = !m.length;
+    const ouvert = l.open || !ok;
+    const types = typesDe(l.categorie);
+    return '<div class="dl' + (ok ? ' ok' : '') + (ouvert ? ' open' : '') + '" data-uid="' + l.uid + '" style="--c:' + c.couleur + '">' +
+      '<div class="dl-h">' +
+        '<span class="dl-ic">' + ico(icoArticle(l.libelle, l.categorie)) + '</span>' +
+        '<div class="dl-n"><b>' + esc(l.libelle || 'Article à préciser') + '</b><small>' + esc(c.libelle) + (l.type_besoin ? ' · ' + esc(l.type_besoin) : '') + '</small></div>' +
+        '<div class="qty qty-sm"><button type="button" data-act="moins" aria-label="Moins">−</button><input data-f="quantite" type="number" min="1" inputmode="numeric" value="' + esc(l.quantite) + '" aria-label="Quantité"><button type="button" data-act="plus" aria-label="Plus">+</button></div>' +
+        '<button type="button" class="dl-x" data-act="rm" title="Retirer cette ligne">' + ico('trash-2') + '</button>' +
+      '</div>' +
+      (ouvert ? '<div class="dl-b">' +
+        (l.autre ? '<label class="dl-l">Article *</label><input class="in" data-f="libelle" value="' + esc(l.libelle) + '" placeholder="Précisez l\'article demandé">' : '') +
+        '<label class="dl-l">Type de besoin *</label>' +
+        '<div class="dl-types">' + types.map(function (t) {
+          return '<button type="button" class="pill' + (l.type_besoin === t ? ' on' : '') + '" data-act="type" data-v="' + esc(t) + '">' + esc(t) + '</button>';
+        }).join('') + '</div>' +
+        (avecEquipement(l) ? '<div class="eq"><p class="eq-t">' + ico('history') + 'Équipement actuel</p><div class="fr">' +
+          '<div class="fcol"><label class="dl-l">Année d\'acquisition *</label><input class="in" data-f="annee_acquisition" type="number" inputmode="numeric" min="1980" max="' + new Date().getFullYear() + '" placeholder="Ex. : 2019" value="' + esc(l.annee_acquisition) + '"></div>' +
+          '<div class="fcol"><label class="dl-l">État actuel *</label><select class="in" data-f="etat_actuel"><option value="">— Choisir —</option>' +
+            C.ETATS_EQUIPEMENT.map(function (e) { return '<option' + (l.etat_actuel === e ? ' selected' : '') + '>' + esc(e) + '</option>'; }).join('') +
+          '</select></div></div></div>' : '') +
+        '<label class="dl-l">Motif *</label>' +
+        '<textarea class="in" data-f="motif" rows="2" placeholder="Pourquoi ce besoin ? C\'est l\'élément clé pour la validation.">' + esc(l.motif) + '</textarea>' +
+        '<div class="quick">' + C.MOTIFS_RAPIDES.map(function (q) { return '<button type="button" data-act="motif" data-v="' + esc(q) + '">+ ' + esc(q) + '</button>'; }).join('') + '</div>' +
+        (l.caracteristiques || l.voirCar
+          ? '<label class="dl-l">Caractéristiques</label><input class="in" data-f="caracteristiques" value="' + esc(l.caracteristiques) + '" placeholder="Ex. : Core i7, 16 Go RAM, 512 Go SSD">'
+          : '<button type="button" class="lk dl-car" data-act="car">' + ico('plus') + 'Préciser des caractéristiques (facultatif)</button>') +
+      '</div>' : '') +
+      '<div class="dl-s"><span class="dl-st"></span>' +
+        (ok ? '<button type="button" class="lk" data-act="toggle">' + (ouvert ? 'Réduire' : 'Modifier') + '</button>' : '') +
+      '</div>' +
+    '</div>';
+  }
+
+  function majEtatLigne(el, l) {
+    const m = manques(l);
+    const st = el.querySelector('.dl-st');
+    el.classList.toggle('ok', !m.length);
+    el.classList.toggle('has-motif', !!String(l.motif || '').trim());
+    st.innerHTML = m.length ? ico('circle-alert') + 'À compléter : ' + m.join(', ') : ico('circle-check') + 'Ligne complète';
+    icones();
+  }
+
+  function remplacerLigne(el, l) {
+    const tmp = document.createElement('div');
+    tmp.innerHTML = htmlLigne(l);
+    const neu = tmp.firstChild;
+    el.replaceWith(neu);
+    majEtatLigne(neu, l);
+    majPiedDemande();
+    rendreCatalogue();
+  }
+
+  function rendreDemande() {
+    const box = $('#demLignes');
+    const v = valideurTxt({ poste: S.session.poste, demandeur: S.session.nom, demandeur_id: S.session.id });
+    $('#demWho').innerHTML = ico('user-round') + '<span>Au nom de <b>' + esc(S.session.nom) + '</b> · ' + esc(S.session.poste) + ' · ' + esc(S.session.site) + '<br>Validation par <b>' + esc(v) + '</b></span>';
+    if (NV.envoye) {
+      box.innerHTML = '<div class="dem-ok"><div class="ok-ic">' + ico('check') + '</div><h3>Demande envoyée</h3>' +
+        '<p class="cs">' + NV.envoye.n + ' besoin(s) transmis à ' + esc(v) + ' pour validation.</p>' +
+        '<div class="ok-ref">' + esc(NV.envoye.ref) + '</div>' +
+        '<div class="dem-ok-b"><button type="button" class="btn bo" data-act="voir-mes">' + ico('list-checks') + 'Suivre mes besoins</button>' +
+        '<button type="button" class="btn bp" data-act="nouvelle">' + ico('plus') + 'Nouvelle demande</button></div></div>';
+      $('#demSub').textContent = '';
+      $('#demVider').hidden = true;
+      $('#demMsg').textContent = '';
+      $('#nvDem .dem-f').hidden = true;
+      icones();
+      return;
+    }
+    $('#nvDem .dem-f').hidden = false;
+    box.innerHTML = S.panier.length
+      ? S.panier.map(htmlLigne).join('')
+      : '<div class="dem-vide"><div class="dem-vide-ic">' + ico('mouse-pointer-click') + '</div><b>Votre demande est vide</b><span>Cliquez sur un article du catalogue pour l\'ajouter ici.</span></div>';
+    $$('#demLignes [data-uid]').forEach(function (el) {
+      const l = S.panier.find(function (x) { return String(x.uid) === el.dataset.uid; });
+      if (l) majEtatLigne(el, l);
     });
-    sauverPanier();
-    rendrePanier();
-    allerA(4);
+    majPiedDemande();
+    icones();
+  }
+
+  function majPiedDemande() {
+    const n = S.panier.length;
+    const incompletes = S.panier.filter(function (l) { return manques(l).length; }).length;
+    const qte = somme(S.panier, function (l) { return l.quantite; });
+    $('#demSub').textContent = n ? n + ' ligne(s) · ' + nombre(qte) + ' unité(s)' : 'Aucun article pour le moment';
+    $('#demVider').hidden = !n;
+    $('#demEnvoyer').disabled = !n || incompletes > 0;
+    $('#demEnvoyerTxt').textContent = n ? 'Envoyer ma demande (' + n + ')' : 'Envoyer ma demande';
+    $('#demMsg').className = 'dem-msg' + (incompletes ? ' warn' : '');
+    $('#demMsg').textContent = !n ? '' : incompletes ? incompletes + ' ligne(s) à compléter avant l\'envoi.' : 'Tout est prêt : vous pouvez envoyer.';
+    majCompteurPanier();
+    majBarreMobile();
+  }
+
+  function majBarreMobile() {
+    const bar = $('#nvBar');
+    bar.hidden = !(S.vue === 'nouveau' && S.panier.length && window.innerWidth <= 1024 && !NV.envoye);
+    $('#nvBarN').textContent = S.panier.length;
+  }
+
+  async function envoyerDemande() {
+    const premier = S.panier.find(function (l) { return manques(l).length; });
+    if (premier) {
+      premier.open = true;
+      rendreDemande();
+      const el = $('[data-uid="' + premier.uid + '"]');
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      toast('Complétez : ' + manques(premier).join(', ') + '.', 'err');
+      return;
+    }
+    if (!S.panier.length) return;
+    const btn = $('#demEnvoyer');
+    btn.disabled = true;
+    chargement(true);
+    try {
+      const items = S.panier.map(function (l) {
+        return {
+          categorie: l.categorie, type_besoin: l.type_besoin, libelle: String(l.libelle).trim(), quantite: parseInt(l.quantite, 10),
+          caracteristiques: String(l.caracteristiques || '').trim(), motif: String(l.motif).trim(),
+          annee_acquisition: avecEquipement(l) ? parseInt(l.annee_acquisition, 10) : '', etat_actuel: avecEquipement(l) ? l.etat_actuel : '',
+        };
+      });
+      const r = await Store.create(S.session, { items: items });
+      NV.envoye = { ref: r.ref, n: items.length };
+      S.panier = [];
+      sauverPanier();
+      rendreNouveau();
+      $('#nvDem').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      actualiser(true);
+    } catch (e) {
+      toast(e.message, 'err');
+      btn.disabled = false;
+    } finally {
+      chargement(false);
+    }
   }
 
   function sauverPanier() {
-    memoire.ecrire(clePanier(), S.panier);
+    memoire.ecrire(clePanier(), S.panier.map(function (l) { const c = Object.assign({}, l); delete c.voirCar; return c; }));
     majCompteurPanier();
   }
 
@@ -1195,51 +1376,199 @@
     $('#sbCart').textContent = n;
   }
 
-  function rendrePanier() {
-    $('#nCart').innerHTML = '<div class="cart-l">' + S.panier.map(function (l, k) {
-      const c = cat(l.categorie);
-      return '<div class="cart-i"><span class="cart-q" style="background:color-mix(in srgb,' + c.couleur + ' 12%,#fff);color:' + c.couleur + '">' + nombre(l.quantite) + '</span>' +
-        '<span class="cart-t"><b>' + esc(l.libelle) + '</b><small>' + esc(c.libelle) + ' · ' + esc(l.type_besoin) + (equipTxt(l) ? ' · ' + esc(equipTxt(l)) : '') + '</small></span>' +
-        '<button type="button" class="cart-x" data-rm="' + k + '" title="Retirer du panier">' + ico('trash-2') + '</button></div>';
-    }).join('') +
-      '<div class="cart-tot"><span>' + S.panier.length + ' ligne(s)</span><span>Quantité totale : <b>' + nombre(somme(S.panier, function (l) { return l.quantite; })) + '</b></span></div></div>';
-    $('#nSubmitTxt').textContent = 'Envoyer ' + S.panier.length + ' besoin' + (S.panier.length > 1 ? 's' : '');
+  /* ================= Vue « Mes besoins » ================= */
+
+  const MES = { statut: '', q: '' };
+
+  function initMes() {
+    $('#mesChips').addEventListener('click', function (e) {
+      const b = e.target.closest('[data-s]');
+      if (!b) return;
+      MES.statut = b.dataset.s;
+      rendreMes();
+    });
+    $('#mesSearch').addEventListener('input', function (e) { MES.q = e.target.value; rendreMes(); });
+    $('#mesListe').addEventListener('click', function (e) {
+      const r = e.target.closest('[data-id]');
+      if (r) ouvrirPanneau(r.dataset.id);
+    });
+  }
+
+  const groupes = function (liste) {
+    const m = {};
+    liste.forEach(function (b) { (m[b.ref] = m[b.ref] || []).push(b); });
+    return Object.keys(m).map(function (k) { return m[k].sort(function (a, b) { return String(a.id).localeCompare(String(b.id)); }); })
+      .sort(function (a, b) { return String(b[0].cree_le).localeCompare(String(a[0].cree_le)); });
+  };
+
+  function rendreMes() {
+    const caisse = !(posteDef(S.session.poste) || {}).siege;
+    const toutes = S.besoins.filter(function (b) { return caisse ? !peutDecider(b) : estMien(b); });
+    $('#mesTitre').textContent = caisse ? 'Besoins du site ' + S.session.site : 'Mes besoins';
+    $('#mesSub').textContent = caisse
+      ? 'Les besoins exprimés par les caissières de ' + S.session.site + ' et leur validation.'
+      : 'Le suivi de vos demandes et de leur validation par ' + valideurTxt({ poste: S.session.poste, demandeur: S.session.nom, demandeur_id: S.session.id }) + '.';
+    const st = stats(toutes);
+    const carte = function (icone, label, val, sous, cls) {
+      return '<div class="st ' + cls + '"><span class="st-i">' + ico(icone) + '</span><div><p class="st-l">' + label + '</p><p class="st-v">' + val + '</p><p class="st-s">' + sous + '</p></div></div>';
+    };
+    $('#mesStats').innerHTML = [
+      carte('send', 'Demandes envoyées', nombre(groupes(toutes).length), nombre(st.n) + ' ligne(s) · ' + nombre(st.qte) + ' unité(s)', 'st-b'),
+      carte('hourglass', 'En attente', nombre(st.EN_ATTENTE), nombre(st.qteAttente) + ' unité(s)', 'st-w'),
+      carte('circle-check', 'Validés', nombre(st.VALIDE), nombre(st.qteValidee) + ' unité(s) validée(s)', 'st-g'),
+      carte('circle-x', 'Rejetés', nombre(st.REJETE), st.REJETE ? 'voir le motif du rejet' : 'aucun rejet', 'st-r'),
+    ].join('');
+    const q = sansAccents(MES.q).trim();
+    let liste = toutes.filter(function (b) {
+      return !q || sansAccents([b.id, b.ref, b.libelle, b.motif, b.demandeur, b.type_besoin].join(' ')).includes(q);
+    });
+    $('#mesChips').innerHTML = [['', 'Tous']].concat(ORDRE_STATUTS.map(function (s) { return [s, STATUTS[s].pluriel]; })).map(function (c) {
+      const n = c[0] ? liste.filter(function (b) { return b.statut === c[0]; }).length : liste.length;
+      return '<button type="button" class="fb' + (MES.statut === c[0] ? ' on' : '') + '" data-s="' + c[0] + '">' + c[1] + ' <i>' + n + '</i></button>';
+    }).join('');
+    if (MES.statut) liste = liste.filter(function (b) { return b.statut === MES.statut; });
+    const gs = groupes(liste);
+    $('#mesListe').innerHTML = gs.length ? gs.map(function (g) {
+      const traites = g.filter(function (b) { return b.statut !== 'EN_ATTENTE'; }).length;
+      const pct = Math.round(traites / g.length * 100);
+      return '<div class="grp"><div class="grp-h">' +
+        '<div class="grp-t"><b>Demande ' + esc(g[0].ref) + '</b><small>' + fDateHeure(g[0].cree_le) + ' · ' + g.length + ' besoin(s)' + (caisse ? ' · ' + esc(g[0].demandeur) + ' (' + esc(g[0].poste) + ')' : '') + '</small></div>' +
+        '<div class="grp-p"><div class="pbt"><div class="pbf" style="width:' + pct + '%;background:#047857"></div></div><span>' + traites + '/' + g.length + ' traité(s)</span></div>' +
+        '</div>' + g.map(ligneSuivi).join('') + '</div>';
+    }).join('') : '<div class="card nd">' + ico('inbox') + (toutes.length ? 'Aucun besoin ne correspond.' : 'Aucun besoin envoyé pour le moment.') +
+      (toutes.length ? '' : '<button type="button" class="btn bp" data-goto="nouveau" style="margin-top:6px">' + ico('plus') + 'Exprimer un besoin</button>') + '</div>';
     icones();
   }
 
-  async function envoyer() {
-    if (!S.panier.length) return;
-    const btn = $('#nSubmit');
-    btn.disabled = true;
+  function ligneSuivi(b) {
+    const c = cat(b.categorie);
+    const details = [esc(b.type_besoin), equipTxt(b) ? esc(equipTxt(b)) : '', b.caracteristiques ? esc(b.caracteristiques) : ''].filter(Boolean).join(' · ');
+    return '<button type="button" class="gr" data-id="' + esc(b.id) + '" style="--c:' + c.couleur + '">' +
+      '<span class="dl-ic">' + ico(icoArticle(b.libelle, b.categorie)) + '</span>' +
+      '<span class="gr-a"><b>' + esc(b.libelle) + '</b><small>' + details + '</small>' +
+        (b.statut === 'REJETE' && b.commentaire_bo ? '<span class="gr-rej">' + ico('message-square-warning') + esc(b.commentaire_bo) + '</span>' : '') + '</span>' +
+      '<span class="gr-q"><small>Demandé</small><b>' + nombre(b.quantite) + '</b></span>' +
+      '<span class="gr-q"><small>Validé</small><b>' + (b.statut === 'VALIDE' ? nombre(b.quantite_validee) : '—') + '</b></span>' +
+      '<span class="gr-s">' + badgeStatut(b.statut) + (b.traite_par ? '<small>' + esc(b.traite_par) + '</small>' : '') + '</span>' +
+    '</button>';
+  }
+
+  /* ================= Vue « À valider » ================= */
+
+  const VAL = { onglet: 'attente', site: '', cat: '', q: '' };
+
+  function initValider() {
+    $('#valSite').innerHTML = '<option value="">Tous les sites</option>' + C.SITES.map(function (p) { return '<option>' + esc(p) + '</option>'; }).join('');
+    $('#valCat').innerHTML = '<option value="">Toutes catégories</option>' + CATS.map(function (c) { return '<option value="' + c.code + '">' + esc(c.libelle) + '</option>'; }).join('');
+    $('#valTabs').addEventListener('click', function (e) {
+      const b = e.target.closest('[data-o]');
+      if (!b) return;
+      VAL.onglet = b.dataset.o;
+      rendreValider();
+    });
+    $('#valSite').addEventListener('change', function (e) { VAL.site = e.target.value; rendreValider(); });
+    $('#valCat').addEventListener('change', function (e) { VAL.cat = e.target.value; rendreValider(); });
+    $('#valSearch').addEventListener('input', function (e) { VAL.q = e.target.value; rendreValider(); });
+    const box = $('#valListe');
+    box.addEventListener('click', function (e) {
+      const el = e.target.closest('[data-act]');
+      if (!el) {
+        const r = e.target.closest('.gr[data-id]');
+        if (r) ouvrirPanneau(r.dataset.id);
+        return;
+      }
+      const row = e.target.closest('[data-id]');
+      const act = el.dataset.act;
+      if (act === 'tout') {
+        const ids = el.dataset.ids.split(',');
+        decider(ids, 'VALIDE', '', null, ids.length + ' besoin(s) validé(s).');
+        return;
+      }
+      if (!row) return;
+      const id = row.dataset.id;
+      if (act === 'ok') {
+        const q = row.querySelector('[data-q]');
+        const v = Number(q.value);
+        if (q.value === '' || !(v >= 0)) { q.classList.add('err'); q.focus(); toast('Quantité validée invalide.', 'err'); return; }
+        decider([id], 'VALIDE', '', Math.round(v), 'Besoin validé.');
+      } else if (act === 'ko') {
+        row.classList.add('rej');
+        const i = row.querySelector('[data-rej]');
+        i.focus();
+      } else if (act === 'ko-annuler') {
+        row.classList.remove('rej');
+      } else if (act === 'ko-ok') {
+        const i = row.querySelector('[data-rej]');
+        if (!i.value.trim()) { i.classList.add('err'); i.focus(); toast('Indiquez le motif du rejet.', 'err'); return; }
+        decider([id], 'REJETE', i.value.trim(), null, 'Besoin rejeté.');
+      } else if (act === 'detail') {
+        ouvrirPanneau(id);
+      }
+    });
+    box.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && e.target.matches('[data-rej]')) { e.preventDefault(); e.target.closest('[data-id]').querySelector('[data-act="ko-ok"]').click(); }
+    });
+  }
+
+  async function decider(ids, statut, commentaire, qte, message) {
     chargement(true);
     try {
-      const r = await Store.create(S.session, { items: S.panier });
-      const n = S.panier.length;
-      S.panier = [];
-      sauverPanier();
-      $$('#fNew .nstep').forEach(function (s) { s.hidden = true; });
-      $('#nSubmit').hidden = true;
-      $('#nNext').hidden = true;
-      $('#nPrev').innerHTML = 'Fermer';
-      N.etape = 4;
-      $$('#nSteps li').forEach(function (li) { li.classList.remove('actif'); li.classList.add('fait'); });
-      $('#nErr').innerHTML = '';
-      const box = document.createElement('div');
-      box.className = 'nstep ok-box';
-      box.innerHTML = '<div class="ok-ic">' + ico('check') + '</div><h3 class="pnm">Besoins envoyés pour validation</h3>' +
-        '<p class="cs">' + n + ' ligne(s) enregistrée(s) — ' + esc(S.session.nom) + ', ' + esc(S.session.site) + '.</p><div class="ok-ref">' + esc(r.ref) + '</div>' +
-        '<p class="cs">Vous suivrez leur validation dans le registre des besoins.</p>' +
-        '<button type="button" class="add-more" id="nAgain" style="margin-top:16px">' + ico('plus') + 'Exprimer d\'autres besoins</button>';
-      $('#fNew .mdl-bd').insertBefore(box, $('#nErr'));
-      $('#nAgain').addEventListener('click', function () { box.remove(); nouvelleLigne(false); });
-      icones();
-      actualiser(true);
+      const data = { ids: ids, statut: statut, commentaire: commentaire };
+      if (qte !== null && qte !== undefined) data.quantite_validee = qte;
+      await Store.decide(S.session, data);
+      toast(message, 'ok');
+      await actualiser(true);
     } catch (e) {
-      $('#nErr').textContent = e.message;
+      toast(e.message, 'err');
     } finally {
-      btn.disabled = false;
       chargement(false);
     }
+  }
+
+  function rendreValider() {
+    if (!estBO()) return;
+    const mien = S.besoins.filter(peutDecider);
+    const attente = mien.filter(function (b) { return b.statut === 'EN_ATTENTE'; });
+    $('#nbValider').hidden = !attente.length;
+    $('#nbValider').textContent = attente.length;
+    $('#valSub').textContent = estManager()
+      ? 'Besoins exprimés par les responsables et les managers.'
+      : 'Besoins que vous validez : ' + (C.VALIDEURS[S.session.nom] ? C.VALIDEURS[S.session.nom].postes.concat(C.VALIDEURS[S.session.nom].personnes).join(', ') : '') + '.';
+    $('#valTabs').innerHTML = [['attente', 'À traiter', attente.length], ['traites', 'Déjà traités', mien.length - attente.length]].map(function (o) {
+      return '<button type="button" class="fb' + (VAL.onglet === o[0] ? ' on' : '') + '" data-o="' + o[0] + '">' + o[1] + ' <i>' + o[2] + '</i></button>';
+    }).join('');
+    const q = sansAccents(VAL.q).trim();
+    const liste = (VAL.onglet === 'attente' ? attente : mien.filter(function (b) { return b.statut !== 'EN_ATTENTE'; })).filter(function (b) {
+      if (VAL.site && b.site !== VAL.site) return false;
+      if (VAL.cat && b.categorie !== VAL.cat) return false;
+      return !q || sansAccents([b.id, b.ref, b.libelle, b.motif, b.demandeur, b.poste, b.site].join(' ')).includes(q);
+    });
+    const gs = groupes(liste);
+    $('#valListe').innerHTML = gs.length ? gs.map(function (g) {
+      const b0 = g[0];
+      const enAtt = g.filter(function (b) { return b.statut === 'EN_ATTENTE'; });
+      return '<div class="grp"><div class="grp-h">' +
+        '<span class="av">' + esc(initiales(b0.demandeur)) + '</span>' +
+        '<div class="grp-t"><b>' + esc(b0.demandeur) + '</b><small>' + esc(b0.poste) + ' · ' + esc(b0.site) + ' · demande ' + esc(b0.ref) + ' du ' + fDateHeure(b0.cree_le) +
+          (VAL.onglet === 'attente' && joursDepuis(b0.cree_le) >= C.SEUIL_ATTENTE_JOURS ? ' · <span class="adys">' + Math.floor(joursDepuis(b0.cree_le)) + ' j d\'attente</span>' : '') + '</small></div>' +
+        (enAtt.length > 1 ? '<button type="button" class="btn bo btn-sm" data-act="tout" data-ids="' + enAtt.map(function (b) { return esc(b.id); }).join(',') + '">' + ico('check-check') + 'Tout valider (' + enAtt.length + ')</button>' : '') +
+        '</div>' + g.map(function (b) { return VAL.onglet === 'attente' ? ligneValidation(b) : ligneSuivi(b); }).join('') + '</div>';
+    }).join('') : '<div class="card nd">' + ico(VAL.onglet === 'attente' ? 'party-popper' : 'inbox') +
+      (VAL.onglet === 'attente' ? (attente.length ? 'Aucun besoin ne correspond aux filtres.' : 'Rien à valider pour le moment.') : 'Aucun besoin traité pour le moment.') + '</div>';
+    icones();
+  }
+
+  function ligneValidation(b) {
+    const c = cat(b.categorie);
+    const details = [esc(c.libelle), esc(b.type_besoin), equipTxt(b) ? '<b class="eqb">' + esc(equipTxt(b)) + '</b>' : '', b.caracteristiques ? esc(b.caracteristiques) : ''].filter(Boolean).join(' · ');
+    return '<div class="vr" data-id="' + esc(b.id) + '" style="--c:' + c.couleur + '">' +
+      '<span class="dl-ic">' + ico(icoArticle(b.libelle, b.categorie)) + '</span>' +
+      '<div class="vr-a"><b>' + esc(b.libelle) + '</b><small>' + details + '</small><p class="vr-m">' + ico('quote') + esc(b.motif) + '</p></div>' +
+      '<div class="vr-q"><small>Demandé</small><b>' + nombre(b.quantite) + '</b></div>' +
+      '<div class="vr-v"><small>Validé</small><input class="in" type="number" min="0" inputmode="numeric" data-q value="' + esc(b.quantite) + '" aria-label="Quantité validée"></div>' +
+      '<div class="vr-b"><button type="button" class="vb vb-ok" data-act="ok">' + ico('check') + 'Valider</button><button type="button" class="vb vb-ko" data-act="ko">' + ico('x') + 'Rejeter</button></div>' +
+      '<div class="vr-r"><input class="in" data-rej placeholder="Motif du rejet (obligatoire), puis Entrée"><button type="button" class="vb vb-ko" data-act="ko-ok">Confirmer le rejet</button><button type="button" class="lk" data-act="ko-annuler">Annuler</button></div>' +
+    '</div>';
   }
 
   /* ================= Export Excel ================= */

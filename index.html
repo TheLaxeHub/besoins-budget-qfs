@@ -109,11 +109,10 @@
     <div class="sb-head"><img src="assets/img/logo-qfs.png" alt="Quipux Financial Services"></div>
     <nav class="sb-nav" id="sbNav">
       <p class="sb-lbl" data-cfg="CAMPAGNE"></p>
-      <a href="#sec-kpi" class="sb-a"><i data-lucide="layout-dashboard"></i>Tableau de bord</a>
-      <a href="#sec-reg" class="sb-a"><i data-lucide="list-checks"></i><span id="sbReg">Registre</span></a>
-      <a href="#sec-synth" class="sb-a bo-only"><i data-lucide="building-2"></i>Synthèse par site</a>
-      <a href="#sec-art" class="sb-a bo-only"><i data-lucide="package"></i>Articles consolidés</a>
-      <button type="button" class="sb-a" id="sbNew"><i data-lucide="circle-plus"></i>Exprimer un besoin<span class="sb-n" id="sbCart" hidden></span></button>
+      <button type="button" class="sb-a bo-only" data-view="valider"><i data-lucide="stamp"></i>À valider<span class="sb-n" id="nbValider" hidden></span></button>
+      <button type="button" class="sb-a" data-view="nouveau"><i data-lucide="circle-plus"></i>Exprimer un besoin<span class="sb-n" id="sbCart" hidden></span></button>
+      <button type="button" class="sb-a" data-view="mes"><i data-lucide="list-checks"></i><span id="sbMes">Mes besoins</span></button>
+      <button type="button" class="sb-a bo-only" data-view="tdb"><i data-lucide="layout-dashboard"></i>Tableau de bord</button>
     </nav>
     <div class="sb-foot">
       <div class="sb-user">
@@ -129,7 +128,7 @@
     <header class="top">
       <button type="button" class="ibtn" id="sbToggle" aria-label="Afficher le menu"><i data-lucide="panel-left"></i></button>
       <span class="top-sep"></span>
-      <nav class="bc" aria-label="Fil d'Ariane"><span data-cfg="CAMPAGNE"></span><i data-lucide="chevron-right"></i><b id="bcWho"></b></nav>
+      <nav class="bc" aria-label="Fil d'Ariane"><span data-cfg="CAMPAGNE"></span><i data-lucide="chevron-right"></i><b id="bcVue"></b></nav>
       <div class="top-r">
         <span class="demo-pill" id="tbDemo" hidden>Mode démo</span>
         <span class="tfi" id="tbSync"></span>
@@ -138,21 +137,84 @@
     </header>
 
     <main class="main">
-      <header class="pg-h">
-        <div class="pg-hl">
-          <span class="pg-ico" id="pgIco"></span>
-          <div>
-            <p class="eyebrow" id="pgEyebrow"></p>
-            <h1 class="pg-t" data-cfg="APP_TITRE"></h1>
-            <p class="pg-m" id="pgMeta"></p>
-          </div>
-        </div>
-        <div class="pg-act">
-          <button type="button" class="btn bo bo-only" id="btnXlsx" title="Exporter en Excel les besoins validés"><i data-lucide="file-spreadsheet"></i>Excel</button>
-        </div>
-      </header>
+      <div class="dl-banner" id="dlBanner" hidden></div>
 
-      <div class="dl-banner pdv-only" id="dlBanner" hidden></div>
+      <!-- ============ VUE : EXPRIMER UN BESOIN (catalogue + demande) ============ -->
+      <section class="view" data-view="nouveau" hidden>
+        <header class="vh">
+          <div>
+            <h1 class="vh-t">Exprimer un besoin</h1>
+            <p class="vh-s" id="nvSub">Cliquez sur les articles dont vous avez besoin, complétez chaque ligne puis envoyez votre demande.</p>
+          </div>
+        </header>
+        <div class="nv">
+          <div class="nv-cat">
+            <div class="nv-tools">
+              <div class="seg" id="nvCats" role="tablist"></div>
+              <div class="sbx"><i data-lucide="search" class="si"></i><input type="search" id="nvSearch" placeholder="Rechercher un article…" autocomplete="off" aria-label="Rechercher un article"></div>
+            </div>
+            <div class="tiles" id="nvTiles"></div>
+          </div>
+          <aside class="dem" id="nvDem">
+            <div class="dem-h">
+              <div><h2 class="dem-t"><i data-lucide="clipboard-list"></i>Ma demande</h2><p class="cs" id="demSub"></p></div>
+              <button type="button" class="lk" id="demVider" hidden>Tout retirer</button>
+            </div>
+            <div class="dem-l" id="demLignes"></div>
+            <div class="dem-f">
+              <div class="dem-who" id="demWho"></div>
+              <div class="dem-msg" id="demMsg"></div>
+              <button type="button" class="btn bp dem-go" id="demEnvoyer" disabled><i data-lucide="send"></i><span id="demEnvoyerTxt">Envoyer ma demande</span></button>
+            </div>
+          </aside>
+        </div>
+        <button type="button" class="nv-bar" id="nvBar" hidden><span><i data-lucide="clipboard-list"></i><b id="nvBarN">0</b> besoin(s) dans ma demande</span><span>Voir et envoyer<i data-lucide="arrow-down"></i></span></button>
+      </section>
+
+      <!-- ============ VUE : MES BESOINS (suivi) ============ -->
+      <section class="view" data-view="mes" hidden>
+        <header class="vh">
+          <div>
+            <h1 class="vh-t" id="mesTitre">Mes besoins</h1>
+            <p class="vh-s" id="mesSub"></p>
+          </div>
+          <button type="button" class="btn bp" data-goto="nouveau"><i data-lucide="plus"></i>Nouveau besoin</button>
+        </header>
+        <div class="stats" id="mesStats"></div>
+        <div class="tcl">
+          <div class="chips" id="mesChips"></div>
+          <div class="sbx"><i data-lucide="search" class="si"></i><input type="search" id="mesSearch" placeholder="Rechercher un article, une référence…" aria-label="Rechercher dans mes besoins"></div>
+        </div>
+        <div class="grp-l" id="mesListe"></div>
+      </section>
+
+      <!-- ============ VUE : À VALIDER (valideurs) ============ -->
+      <section class="view bo-only" data-view="valider" hidden>
+        <header class="vh">
+          <div>
+            <h1 class="vh-t">Besoins à valider</h1>
+            <p class="vh-s" id="valSub"></p>
+          </div>
+          <button type="button" class="btn bo" data-export><i data-lucide="file-spreadsheet"></i>Exporter les validés</button>
+        </header>
+        <div class="tcl">
+          <div class="chips" id="valTabs"></div>
+          <select id="valSite" class="in in-sm" aria-label="Filtrer par site"></select>
+          <select id="valCat" class="in in-sm" aria-label="Filtrer par catégorie"></select>
+          <div class="sbx"><i data-lucide="search" class="si"></i><input type="search" id="valSearch" placeholder="Rechercher un demandeur, un article…" aria-label="Rechercher"></div>
+        </div>
+        <div class="grp-l" id="valListe"></div>
+      </section>
+
+      <!-- ============ VUE : TABLEAU DE BORD (valideurs) ============ -->
+      <section class="view bo-only" data-view="tdb" hidden>
+        <header class="vh">
+          <div>
+            <h1 class="vh-t">Tableau de bord</h1>
+            <p class="vh-s" id="pgMeta"></p>
+          </div>
+          <button type="button" class="btn bo" data-export><i data-lucide="file-spreadsheet"></i>Exporter les validés</button>
+        </header>
 
       <!-- Filtres -->
       <div class="card flt">
@@ -284,6 +346,8 @@
         </div>
       </section>
 
+      </section>
+
       <footer class="ft" id="ftText"></footer>
     </main>
   </div>
@@ -302,82 +366,6 @@
     <div id="pForm"></div>
   </div>
 </aside>
-
-<!-- ================= EXPRIMER UN BESOIN (assistant pas à pas) ================= -->
-<div class="mdl" id="mNew" hidden role="dialog" aria-modal="true" aria-labelledby="mNewTitle">
-  <form class="mdl-box" id="fNew" novalidate>
-    <div class="ph">
-      <p class="pid" id="mNewSite"></p>
-      <h2 class="pnm" id="mNewTitle">Exprimer un besoin</h2>
-      <button type="button" class="pcl" data-close aria-label="Fermer"><i data-lucide="x"></i></button>
-    </div>
-    <ol class="stp" id="nSteps">
-      <li data-step="1"><span class="stp-n">1</span><span class="stp-l">Catégorie</span></li>
-      <li data-step="2"><span class="stp-n">2</span><span class="stp-l">Article</span></li>
-      <li data-step="3"><span class="stp-n">3</span><span class="stp-l">Motif</span></li>
-      <li data-step="4"><span class="stp-n">4</span><span class="stp-l">Panier &amp; envoi</span></li>
-    </ol>
-    <div class="mdl-bd">
-      <!-- Étape 1 : catégorie -->
-      <section class="nstep" data-step="1">
-        <p class="nstep-h">Quel type de besoin voulez-vous exprimer ?</p>
-        <div class="nat" id="nCats"></div>
-      </section>
-
-      <!-- Étape 2 : article -->
-      <section class="nstep" data-step="2" hidden>
-        <label class="fl">Type de besoin *</label>
-        <div class="ops" id="nTypes"></div>
-        <div class="fr">
-          <div class="fcol">
-            <label class="fl" for="nLib">Article *</label>
-            <select class="in" id="nLib"></select>
-            <input class="in" id="nLibAutre" placeholder="Précisez l'article" style="margin-top:8px" hidden autocomplete="off">
-          </div>
-          <div class="fcol">
-            <label class="fl" for="nQte">Quantité demandée *</label>
-            <div class="qty">
-              <button type="button" data-q="-1" aria-label="Moins">−</button>
-              <input id="nQte" type="number" min="1" step="1" value="1" inputmode="numeric">
-              <button type="button" data-q="1" aria-label="Plus">+</button>
-            </div>
-          </div>
-        </div>
-        <label class="fl" for="nCar">Caractéristiques</label>
-        <input class="in" id="nCar" placeholder="Ex. : HP ProBook, Core i7, 16 Go RAM, 512 Go SSD" autocomplete="off">
-        <div class="eq" id="nEq" hidden>
-          <p class="eq-t"><i data-lucide="history"></i>Équipement actuel à remplacer / renouveler</p>
-          <div class="fr">
-            <div class="fcol"><label class="fl" for="nAnnee">Année d'acquisition de l'équipement actuel *</label><input class="in" id="nAnnee" type="number" inputmode="numeric" min="1980" step="1" placeholder="Ex. : 2019"></div>
-            <div class="fcol"><label class="fl" for="nEtat">État de l'équipement actuel *</label><select class="in" id="nEtat"></select></div>
-          </div>
-        </div>
-      </section>
-
-      <!-- Étape 3 : justification -->
-      <section class="nstep" data-step="3" hidden>
-        <label class="fl" for="nMotif">Motif / justification *</label>
-        <textarea class="in" id="nMotif" rows="3" placeholder="Pourquoi ce besoin ? C'est l'élément clé pour la validation."></textarea>
-        <div class="quick" id="nQuick"></div>
-      </section>
-
-      <!-- Étape 4 : panier -->
-      <section class="nstep" data-step="4" hidden>
-        <p class="nstep-h">Votre besoin a été ajouté au panier. Ajoutez-en d'autres ou envoyez le tout au Back Office.</p>
-        <div id="nCart"></div>
-        <button type="button" class="add-more" id="nAddMore"><i data-lucide="plus"></i>Ajouter un autre besoin</button>
-        <div class="n-who" id="nWho"></div>
-      </section>
-
-      <div class="lg-err" id="nErr" role="alert"></div>
-    </div>
-    <div class="mdl-ft">
-      <button type="button" class="btn bo" id="nPrev"></button>
-      <button type="button" class="btn bp" id="nNext">Suivant<i data-lucide="arrow-right"></i></button>
-      <button type="submit" class="btn bp" id="nSubmit"><i data-lucide="send"></i><span id="nSubmitTxt">Envoyer</span></button>
-    </div>
-  </form>
-</div>
 
 <div class="ld" id="loader" hidden><div class="ld-s"></div></div>
 <div class="toast" id="toast" role="status"></div>
