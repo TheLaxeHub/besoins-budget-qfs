@@ -31,7 +31,7 @@ La session reste ouverte sur l'appareil jusqu'à « Se déconnecter » (6 h maxi
 | Valideur | Valide les besoins de |
 |---|---|
 | **Zeinab Kone** (Responsable) | Caissières E-money, Aminata Sow, Anne Adjo, Axel Kouamenan |
-| **Yaya Comara** (Responsable) | Caissières ordinaires, Kader Soro, Isaac Kone, Kady Bakayoko, Yasmine Kamagate |
+| **Yaya Comara** (Responsable) | Caissières ordinaires, Kader Soro, Isaac Kone, Kady Bakayoko, Yasmine Kamagate, Mohamed Cisse |
 | **Managers** (Issa Kone, Jansenus Koffi) | Tous les Responsables (dont Massandje Dagnoko et Rita Kessie) et les Managers eux-mêmes |
 
 Massandje Dagnoko et Rita Kessie sont Responsables mais ne valident pas : elles expriment leurs besoins, qui sont validés par les Managers. Un responsable ne valide jamais ses propres besoins. Le réglage se trouve dans `VALIDEURS` (`config.js` et `Code.gs`) : une personne ajoutée dans l'onglet `Personnes` doit aussi y être rattachée à un valideur.

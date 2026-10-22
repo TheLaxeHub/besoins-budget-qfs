@@ -37,7 +37,7 @@ const POSTES_SIEGE = ['Opérateur', 'Assistant', 'Chef', 'Responsable', 'Manager
 // Les autres responsables ne valident pas. Les Managers valident les besoins des postes POSTES_MANAGER.
 const VALIDEURS = {
   'Zeinab Kone': { postes: ['Caissière E-money'], personnes: ['Aminata Sow', 'Anne Adjo', 'Axel Kouamenan'] },
-  'Yaya Comara': { postes: ['Caissière ordinaire'], personnes: ['Kader Soro', 'Isaac Kone', 'Kady Bakayoko', 'Yasmine Kamagate'] },
+  'Yaya Comara': { postes: ['Caissière ordinaire'], personnes: ['Kader Soro', 'Isaac Kone', 'Kady Bakayoko', 'Yasmine Kamagate', 'Mohamed Cisse'] },
 };
 const POSTES_MANAGER = ['Responsable', 'Manager'];
 // Personnes du siège qui exportent tous les besoins validés sans les valider (à garder identique à config.js).
@@ -52,6 +52,7 @@ const PERSONNES_INIT = [
   ['Isaac Kone', 'Opérateur', 'isaac.kone@cgi.ci'],
   ['Yasmine Kamagate', 'Opérateur', 'yasmine.kamagate@cgi.ci'],
   ['Anne Adjo', 'Opérateur', 'anne.niamkoun@cgi.ci'],
+  ['Mohamed Cisse', 'Opérateur', 'mohamed.cisse@cgi.ci'],
   ['Aminata Sow', 'Assistant', 'aminata.sow@cgi.ci'],
   ['Kady Bakayoko', 'Assistant', 'karidja.bakayoko@cgi.ci'],
   ['Axel Kouamenan', 'Chef', 'axel.kouamenan@cgi.ci'],

@@ -5,7 +5,7 @@
 window.APP_CONFIG = {
   // URL de l'application Web Google Apps Script (voir README, « Mise en service »).
   // Vide = MODE DÉMONSTRATION : les données restent dans le navigateur (pour tester l'interface).
-  API_URL: 'https://script.google.com/macros/s/AKfycbymsMxmwX9OYciYQNv43SNPPwma4ZNCfLXfAQtGH9WMqvocCJWoaeferfG3bGBinl6X/exec',
+  API_URL: 'https://script.google.com/macros/s/AKfycbxouXX2Ukz-OfKkesgDV6OZ1qczoe-kmIrylIOqjIALAs_iahJY1vnoiEzqjs1gAmpm/exec',
 
   APP_TITRE: 'Expression des Besoins — Budget 2027',
   APP_SOUS_TITRE: 'QFS E-Money — Informatique, Mobilier & Achats',
@@ -32,7 +32,7 @@ window.APP_CONFIG = {
   POSTES: [
     { libelle: 'Caissière ordinaire', siege: false, ico: 'user-round', aide: 'Besoins de mon site' },
     { libelle: 'Caissière E-money', siege: false, ico: 'smartphone', aide: 'Besoins de mon site' },
-    { libelle: 'Opérateur', siege: true, ico: 'headset', aide: 'Mes besoins', personnes: ['Isaac Kone', 'Yasmine Kamagate', 'Anne Adjo'] },
+    { libelle: 'Opérateur', siege: true, ico: 'headset', aide: 'Mes besoins', personnes: ['Isaac Kone', 'Yasmine Kamagate', 'Anne Adjo', 'Mohamed Cisse'] },
     { libelle: 'Assistant', siege: true, ico: 'clipboard-list', aide: 'Mes besoins', personnes: ['Aminata Sow', 'Kady Bakayoko'] },
     { libelle: 'Chef', siege: true, ico: 'user-cog', aide: 'Mes besoins', personnes: ['Axel Kouamenan', 'Kader Soro'] },
     { libelle: 'Responsable', siege: true, ico: 'shield-check', aide: 'Besoins et validation', personnes: ['Zeinab Kone', 'Yaya Comara', 'Massandje Dagnoko', 'Rita Kessie'] },
@@ -44,7 +44,7 @@ window.APP_CONFIG = {
   // À garder identique à VALIDEURS dans apps-script/Code.gs.
   VALIDEURS: {
     'Zeinab Kone': { postes: ['Caissière E-money'], personnes: ['Aminata Sow', 'Anne Adjo', 'Axel Kouamenan'] },
-    'Yaya Comara': { postes: ['Caissière ordinaire'], personnes: ['Kader Soro', 'Isaac Kone', 'Kady Bakayoko', 'Yasmine Kamagate'] },
+    'Yaya Comara': { postes: ['Caissière ordinaire'], personnes: ['Kader Soro', 'Isaac Kone', 'Kady Bakayoko', 'Yasmine Kamagate', 'Mohamed Cisse'] },
   },
   POSTES_MANAGER: ['Responsable', 'Manager'], // postes dont les besoins sont validés par les Managers
   // Personnes du siège qui exportent en Excel tous les besoins validés, sans les valider elles-mêmes.

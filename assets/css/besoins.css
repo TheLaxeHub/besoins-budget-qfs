@@ -30,7 +30,6 @@
 .lg-role:hover .lg-role-i,.lg-role:focus-visible .lg-role-i{background:var(--brand);color:#fff}
 .lg-role-i svg.lucide{width:19px;height:19px}
 .lg-role b{font-size:14px;color:var(--heading)}
-.lg-role small{font-size:12px;color:var(--body-subtle)}
 .lg-roles-site .lg-role-i{background:var(--accent-soft);color:var(--accent)}
 .lg-roles-site .lg-role:hover .lg-role-i,.lg-roles-site .lg-role:focus-visible .lg-role-i{background:var(--accent);color:#fff}
 .lg-renvoi{display:flex;align-items:center;justify-content:center;gap:6px;width:100%;margin-top:12px;background:none;border:1px dashed var(--default);border-radius:12px;color:var(--brand);font-weight:600;padding:10px}

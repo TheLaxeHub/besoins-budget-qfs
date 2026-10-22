@@ -157,7 +157,7 @@
     $('#lgConf').hidden = Store.configure;
     const carte = function (p) {
       return '<button type="button" class="lg-role" data-poste="' + esc(p.libelle) + '"><span class="lg-role-i">' + ico(p.ico || 'user') + '</span>' +
-        '<b>' + esc(p.libelle) + '</b><small>' + esc(p.aide || '') + '</small></button>';
+        '<b>' + esc(p.libelle) + '</b></button>';
     };
     $('#lgRolesSite').innerHTML = C.POSTES.filter(function (p) { return !p.siege; }).map(carte).join('');
     $('#lgRolesSiege').innerHTML = C.POSTES.filter(function (p) { return p.siege; }).map(carte).join('');
