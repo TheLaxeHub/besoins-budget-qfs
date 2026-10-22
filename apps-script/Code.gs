@@ -22,13 +22,23 @@
  */
 
 const SITE_SIEGE = 'SIEGE';
-const SITES = [
-  'ABATTA', 'ABOBO', 'ANGRE', 'BOUAKE', 'PONT FHB', 'VGE', 'YAOU', 'YOPOUGON', 'DABOU', 'DALOA',
-  'DIVO', 'GAGNOA', 'KORHOGO', 'MAN', 'SAN-PEDRO', 'SOUBRE', 'YAKRO', 'ABENGOUROU', 'ABOISSO',
-  'GUIGLO', 'BONDOUKOU', 'BOUAFLE', 'ADZOPE', 'DAOUKRO', 'FERKE', 'SEGUELA', 'ODIENNE',
-  'BOUNDIALI', 'KATIOLA', 'KONG', 'AGBOVILLE', 'SASSANDRA', 'DUEKOUE', 'TOUMODI', 'MINIGNAN',
-  'MANKONO', 'BONGOUANOU', 'DIMBOKRO', 'TOUBA', 'BOUNA', 'COSMOS',
-];
+// Sites proposés à chaque poste en agence (à garder identique à SITES_PAR_POSTE dans assets/js/config.js).
+const SITES_PAR_POSTE = {
+  'Caissière ordinaire': [
+    'SIEGE', 'FOURRIERE AGBAN', 'GUA', 'CGI PARK BASSAM', 'ABENGOUROU', 'SICTA YOPOUGON ZONE INDUSTRIELLE',
+    'ADZOPE', 'CGI STAR AUTO MARCORY', 'CGI YOPOUGON', 'GUB', 'CGI ANGRE', 'VGE', 'SICTA ANGRE', 'PONT',
+    'ABOBO', 'EQM CAMP AGBAN', 'STI BARR INT', 'DABOU', 'EQM CAMP AKOUEDO', 'SICTA NIANGON', 'SICTA PLATEAU',
+    'FOURRIERE MARCORY', 'DALOA', 'FOURRIERE TAMPON PREFECTURE DE POLICE ABOBO', 'GUK', 'CGI KORHOGO',
+    'CGI BASSAM', 'CGI BOUAKE', 'SAN-PEDRO', 'FOURRIERE BASSAM', 'RECTA CI', 'GAGNOA', 'SILOTEC', 'SICTA YAOU',
+    'MAN', 'GUIGLO', 'YAMOUSSOUKRO', 'SICTA VRIDI', 'CGI PARK BASE PSSR', 'MAYELIA COCODY', 'PSSR ABIDJAN MALL',
+    'SICTA MARCORY PLAYCE', 'EQM YOP BAE',
+  ],
+  'Caissière E-money': [
+    'ABOBO', 'ABOISSO', 'AGBOVILLE', 'ANGRE', 'BONDOUKOU', 'BONGOUANOU', 'BOUAKE', 'BOUNA', 'BOUNDIALI',
+    'COSMOS', 'DAOUKRO', 'DIMBOKRO', 'DIVO', 'FERKE', 'FOURRIERE ABOBO', 'FOURRIERE BASSAM', 'GUIGLO', 'KONG',
+    'MANKONO', 'KATIOLA', 'ODIENNE', 'PHB', 'SASSANDRA', 'SEGUELA', 'TOUBA', 'SIEGE', 'VGE', 'YOPOUGON',
+  ],
+};
 
 const POSTES_SITE = ['Caissière ordinaire', 'Caissière E-money'];
 const POSTES_SIEGE = ['Opérateur', 'Assistant', 'Chef', 'Responsable', 'Manager'];
@@ -224,7 +234,7 @@ function connexionSite_(d) {
   const site = String(d.site || '').trim().toUpperCase();
   const nom = texte_(d.nom, 80);
   if (POSTES_SITE.indexOf(poste) < 0) throw erreur_('INTERDIT', 'Ce poste se connecte avec un code envoyé par e-mail.');
-  if (SITES.indexOf(site) < 0) throw erreur_('VALIDATION', 'Site inconnu.');
+  if ((SITES_PAR_POSTE[poste] || []).indexOf(site) < 0) throw erreur_('VALIDATION', 'Site inconnu pour ce poste.');
   if (nom.length < 2) throw erreur_('VALIDATION', 'Indiquez votre nom et prénom.');
   const existant = agentsSite_({ poste: poste, site: site }).find(function (n) { return n.toLowerCase() === nom.toLowerCase(); });
   if (!existant) {

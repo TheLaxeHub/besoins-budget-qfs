@@ -18,7 +18,7 @@ Il s'agit d'un site statique (HTML/CSS/JS, Chart.js, SheetJS, icônes Lucide) pu
 Le parcours compte toujours 3 étapes, indiquées en haut de la carte de connexion :
 
 - **En agence** (Caissière ordinaire, Caissière E-money) : **Poste → Site → Identité**, accès direct.
-  1. La caissière choisit son site parmi les 41 (ABATTA, ABOBO, ANGRE, BOUAKE, PONT FHB… COSMOS), avec une recherche.
+  1. La caissière choisit son site, avec une recherche. Chaque poste a sa propre liste (`SITES_PAR_POSTE`) : 43 sites pour les caissières ordinaires (SIEGE, FOURRIERE AGBAN, GUA… EQM YOP BAE), 28 pour les caissières E-money (ABOBO, ABOISSO, AGBOVILLE… YOPOUGON).
   2. Si des caissières sont déjà enregistrées pour ce site et ce poste, elle touche son nom. Sinon, ou via « Je ne suis pas dans la liste », elle saisit son nom, qui sera proposé aux connexions suivantes (onglet `Agents`).
 - **Au siège** (Opérateur, Assistant, Chef, Responsable, Manager) : **Poste → Identité → Code**. Le site est toujours le **SIEGE**, il n'y a donc pas d'étape « site ».
   1. La personne choisit son nom.
@@ -116,7 +116,7 @@ Tout se règle dans [`assets/js/config.js`](assets/js/config.js) :
 
 | Réglage | Rôle |
 |---|---|
-| `SITES` | Sites proposés aux caissières (à garder identique à `SITES` dans `Code.gs`). |
+| `SITES_PAR_POSTE` | Sites proposés à chaque poste en agence (à garder identique à `SITES_PAR_POSTE` dans `Code.gs`, noms en majuscules). Après modification, redéployer le script Apps Script : le serveur refuse un site qui n'est pas dans la liste du poste. |
 | `CATEGORIES` | Catégories (libellé, icône, couleur) et **articles proposés**. Les codes doivent rester identiques à `CATEGORIES` dans `Code.gs`. |
 | `CATEGORIES[].types` | Types de besoin proposés pour chaque catégorie (`TYPES_BESOIN` = liste complète pour les filtres). |
 | `POSTES` | Postes proposés à la connexion (en agence / au siège). |

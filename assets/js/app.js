@@ -15,7 +15,12 @@
   };
   const ORDRE_STATUTS = ['EN_ATTENTE', 'VALIDE', 'REJETE'];
   const CATS = C.CATEGORIES;
-  const TOUS_SITES = [C.SITE_SIEGE].concat(C.SITES); // synthèses et filtres (le siège en plus des sites)
+  const sitesDe = function (poste) { return (C.SITES_PAR_POSTE || {})[poste] || []; };
+  const unique = function (l) { return l.filter(function (x, i) { return x && l.indexOf(x) === i; }); };
+  // Synthèses et filtres : le siège puis les sites de tous les postes en agence.
+  const TOUS_SITES = unique(Object.keys(C.SITES_PAR_POSTE || {}).reduce(function (t, p) { return t.concat(sitesDe(p)); }, [C.SITE_SIEGE]));
+  // Idem, plus les sites présents dans les données (anciens noms de sites compris).
+  const sitesConnus = function () { return unique(TOUS_SITES.concat(S.besoins.map(function (b) { return b.site; }))); };
   const AUTRE = '__autre__';
   const PAR_PAGE = 100;
   const CLE_SESSION = 'bud27_session';
@@ -234,7 +239,7 @@
 
   function dessinerGrille(q) {
     const n = sansAccents(q).trim();
-    const sites = C.SITES.filter(function (p) { return !n || sansAccents(p).includes(n); });
+    const sites = sitesDe(L.poste && L.poste.libelle).filter(function (p) { return !n || sansAccents(p).includes(n); });
     $('#lgGrid').innerHTML = sites.length
       ? sites.map(function (p) { return '<button type="button" class="lg-pdv" data-site="' + esc(p) + '">' + esc(p) + '</button>'; }).join('')
       : '<div class="lg-none">Aucun site ne correspond à « ' + esc(q) + ' ».</div>';
@@ -260,7 +265,7 @@
       li.classList.toggle('ok', k < pas);
     });
     if (n === 2) {
-      $('#lgSiteH').innerHTML = 'Poste <b>' + esc(L.poste.libelle) + '</b> — choisissez votre site parmi les ' + C.SITES.length + '.';
+      $('#lgSiteH').innerHTML = 'Poste <b>' + esc(L.poste.libelle) + '</b> — choisissez votre site parmi les ' + sitesDe(L.poste.libelle).length + '.';
       $('#lgSearch').value = '';
       dessinerGrille('');
       if (window.innerWidth > 700) setTimeout(function () { $('#lgSearch').focus(); }, 50);
@@ -846,7 +851,7 @@
 
     if (estBO()) {
       const ls = filtrer({ ignorerSite: true }).filter(function (b) { return b.statut !== 'REJETE'; });
-      const sites = TOUS_SITES.map(function (p) { return { p: p, q: somme(ls.filter(function (b) { return b.site === p; }), qteRetenue) }; })
+      const sites = sitesConnus().map(function (p) { return { p: p, q: somme(ls.filter(function (b) { return b.site === p; }), qteRetenue) }; })
         .filter(function (x) { return x.q > 0; })
         .sort(function (a, b) { return b.q - a.q; })
         .map(function (x) { return x.p; });
@@ -931,7 +936,7 @@
   }
 
   function rendreSynthese(liste) {
-    const lignes = TOUS_SITES.map(function (p) {
+    const lignes = sitesConnus().map(function (p) {
       const l = liste.filter(function (b) { return b.site === p; });
       const st = stats(l);
       const parC = {};
@@ -1948,7 +1953,7 @@
     }), [14, 34, 8, 8, 13, 12, 14]), 'Articles consolidés');
 
     if (estBO()) {
-      XLSX.utils.book_append_sheet(wb, feuille(TOUS_SITES.map(function (p) {
+      XLSX.utils.book_append_sheet(wb, feuille(sitesConnus().map(function (p) {
         const l = lignes.filter(function (b) { return b.site === p; });
         const st = stats(l);
         const row = { 'Site': p, 'Lignes': st.n };

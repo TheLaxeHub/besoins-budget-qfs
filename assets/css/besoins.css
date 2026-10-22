@@ -42,7 +42,7 @@
 .otp-t{text-align:center;font-size:13px;color:var(--body);font-variant-numeric:tabular-nums}
 .otp-t b{color:var(--heading)}
 .otp-t.exp{color:var(--fg-danger-strong);font-weight:600}
-#lgGrid{grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:6px}
+#lgGrid{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px}
 #lgGrid .lg-pdv{padding:9px 8px;font-size:12.5px;justify-content:center;text-align:center;min-height:40px;border-radius:10px}
 #lgAgents,#lgPeople{grid-template-columns:repeat(auto-fill,minmax(200px,1fr))}
 @keyframes shake{25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
