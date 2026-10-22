@@ -2,7 +2,8 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover">
+<meta name="theme-color" content="#0b1736">
 <title>Expression des Besoins — Budget 2027 — QFS</title>
 <meta name="description" content="Expression et validation des besoins Informatique, Mobilier et Achats des sites QFS E-Money pour le budget 2027.">
 <link rel="icon" type="image/png" href="assets/img/logo-qfs.png">
@@ -18,91 +19,82 @@
 
 <!-- ================= CONNEXION ================= -->
 <section class="lg" id="login" hidden>
-  <div class="lg-halo lg-halo-1"></div>
-  <div class="lg-halo lg-halo-2"></div>
-
-  <div class="lg-wrap">
-    <div class="lg-head">
-      <span class="lg-logo"><img src="assets/img/logo-qfs.png" alt="Quipux Financial Services"></span>
-      <h1 class="lg-t" data-cfg="APP_TITRE"></h1>
-      <p class="lg-s" data-cfg="APP_SOUS_TITRE"></p>
-    </div>
-
-    <div class="lg-card">
-      <div class="lg-conf" id="lgConf" hidden>
-        <b>Application pas encore reliée à sa base de données.</b>
-        Déployez le script Google Apps Script puis renseignez son URL dans <code>assets/js/config.js</code> (<code>API_URL</code>) — voir le README, section « Mise en service ».
+  <div class="lg-main">
+    <div class="lg-wrap">
+      <div class="lg-mhead">
+        <span class="lg-logo"><img src="assets/img/logo-qfs.png" alt="Quipux Financial Services"></span>
+        <div><b data-cfg="APP_TITRE"></b></div>
       </div>
+      <div class="lg-dl" id="lgDl" hidden></div>
 
-      <ol class="lg-stp" id="lgSteps">
-        <li data-s="1"><span>1</span>Poste</li>
-        <li data-s="2"><span>2</span>Site</li>
-        <li data-s="3"><span>3</span>Accès</li>
-      </ol>
-
-      <!-- Étape 1 : poste -->
-      <div id="lgPoste">
-        <h2 class="lg-q">Quel est votre poste ?</h2>
-        <p class="lg-h">Choisissez votre poste pour accéder à la plateforme.</p>
-        <div class="lg-sep"><span>En agence</span></div>
-        <div class="lg-roles" id="lgRolesSite"></div>
-        <div class="lg-sep"><span>Au siège</span></div>
-        <div class="lg-roles" id="lgRolesSiege"></div>
-      </div>
-
-      <!-- Étape 2 : site -->
-      <div id="lgSite" hidden>
-        <button type="button" class="lg-back" data-back="1"><i data-lucide="arrow-left"></i> Changer de poste</button>
-        <h2 class="lg-q">Votre site</h2>
-        <p class="lg-h" id="lgSiteH"></p>
-        <div id="lgSiteSiege" hidden>
-          <button type="button" class="lg-bo" id="lgSiegeOk">
-            <span class="lg-bo-i"><i data-lucide="building-2"></i></span>
-            <span class="lg-bo-t"><span data-cfg="SITE_SIEGE"></span><small>Les postes du siège sont rattachés au SIEGE</small></span>
-            <i data-lucide="chevron-right" class="lg-bo-a"></i>
-          </button>
+      <div class="lg-card">
+        <div class="lg-conf" id="lgConf" hidden>
+          <b>Application pas encore reliée à sa base de données.</b>
+          Déployez le script Google Apps Script puis renseignez son URL dans <code>assets/js/config.js</code> (<code>API_URL</code>) — voir le README, section « Mise en service ».
         </div>
-        <div id="lgSiteListe" hidden>
-          <div class="sbx lg-sbx"><i data-lucide="search" class="si"></i><input id="lgSearch" type="search" placeholder="Rechercher votre site (Bouaké, Abobo, Barrage…)" autocomplete="off" aria-label="Rechercher un site"></div>
+
+        <ol class="lg-stp" id="lgSteps">
+          <li data-s="1"><span>1</span><em>Poste</em></li>
+          <li data-s="2"><span>2</span><em id="lgStp2">Site</em></li>
+          <li data-s="3"><span>3</span><em id="lgStp3">Identité</em></li>
+        </ol>
+
+        <!-- Étape 1 : poste -->
+        <div id="lgPoste">
+          <h2 class="lg-q">Quel est votre poste ?</h2>
+          <p class="lg-h">Choisissez votre poste pour accéder à la plateforme.</p>
+          <div class="lg-sep"><b>En agence</b><small><i data-lucide="zap"></i>accès direct</small></div>
+          <div class="lg-roles lg-roles-site" id="lgRolesSite"></div>
+          <div class="lg-sep"><b>Au siège</b><small><i data-lucide="mail"></i>code reçu par e-mail</small></div>
+          <div class="lg-roles" id="lgRolesSiege"></div>
+        </div>
+
+        <!-- Étape 2 : site (caissières) -->
+        <div id="lgSite" hidden>
+          <button type="button" class="lg-back" data-back="1"><i data-lucide="arrow-left"></i> Changer de poste</button>
+          <h2 class="lg-q">Dans quel site travaillez-vous ?</h2>
+          <p class="lg-h" id="lgSiteH"></p>
+          <div class="sbx lg-sbx"><i data-lucide="search" class="si"></i><input id="lgSearch" type="search" placeholder="Rechercher votre site (Bouaké, Abobo, Yopougon…)" autocomplete="off" aria-label="Rechercher un site"></div>
           <div class="lg-grid" id="lgGrid"></div>
         </div>
-      </div>
 
-      <!-- Étape 3 : identité -->
-      <div id="lgQui" hidden>
-        <button type="button" class="lg-back" data-back="2"><i data-lucide="arrow-left"></i> Changer de site</button>
-        <h2 class="lg-q">Qui êtes-vous ?</h2>
-        <p class="lg-h" id="lgQuiH"></p>
-        <div id="lgConnus" hidden>
-          <div class="lg-grid lg-people" id="lgAgents"></div>
-          <button type="button" class="lg-renvoi" id="lgPasLa"><i data-lucide="user-plus"></i> Je ne suis pas dans la liste</button>
+        <!-- Étape 3 : identité -->
+        <div id="lgQui" hidden>
+          <button type="button" class="lg-back" id="lgQuiBack" data-back="2"><i data-lucide="arrow-left"></i> <span>Changer de site</span></button>
+          <h2 class="lg-q">Qui êtes-vous ?</h2>
+          <p class="lg-h" id="lgQuiH"></p>
+          <div id="lgConnus" hidden>
+            <div class="lg-grid" id="lgAgents"></div>
+            <button type="button" class="lg-renvoi" id="lgPasLa"><i data-lucide="user-plus"></i> Je ne suis pas dans la liste</button>
+          </div>
+          <form id="lgNomForm" hidden>
+            <label class="fl" for="lgNom">Votre nom et prénom</label>
+            <input class="in" id="lgNom" autocomplete="name" placeholder="Ex. : Kouassi Aya">
+            <button class="btn bp lg-go" type="submit"><i data-lucide="log-in"></i> Accéder à la plateforme</button>
+            <button type="button" class="lg-renvoi" id="lgListe" hidden><i data-lucide="users"></i> Choisir mon nom dans la liste</button>
+          </form>
+          <div class="lg-grid" id="lgPeople" hidden></div>
         </div>
-        <form id="lgNomForm" hidden>
-          <label class="fl" for="lgNom">Votre nom et prénom</label>
-          <input class="in" id="lgNom" autocomplete="name" placeholder="Ex. : Kouassi Aya">
-          <button class="btn bp lg-go" type="submit"><i data-lucide="log-in"></i> Accéder à la plateforme</button>
-          <button type="button" class="lg-renvoi" id="lgListe" hidden><i data-lucide="users"></i> Choisir mon nom dans la liste</button>
+
+        <!-- Étape 4 : code reçu par e-mail (postes du siège) -->
+        <form id="lgOtp" hidden autocomplete="off">
+          <button type="button" class="lg-back" data-back="3"><i data-lucide="arrow-left"></i> Ce n'est pas moi</button>
+          <div class="lg-who" id="lgOtpWho"></div>
+          <p class="lg-h" id="lgOtpH"></p>
+          <div class="otp" id="otpBox">
+            <input inputmode="numeric" maxlength="1" autocomplete="one-time-code" aria-label="Chiffre 1">
+            <input inputmode="numeric" maxlength="1" aria-label="Chiffre 2">
+            <input inputmode="numeric" maxlength="1" aria-label="Chiffre 3">
+            <input inputmode="numeric" maxlength="1" aria-label="Chiffre 4">
+          </div>
+          <div class="otp-t" id="otpTimer"></div>
+          <button class="btn bp lg-go" type="submit" id="otpGo"><i data-lucide="log-in"></i> Valider et accéder</button>
+          <button type="button" class="lg-renvoi" id="otpRenvoi"><i data-lucide="refresh-cw"></i> Recevoir un nouveau code</button>
         </form>
-        <div class="lg-grid lg-people" id="lgPeople" hidden></div>
+
+        <div class="lg-err" id="lgErr" role="alert"></div>
       </div>
-
-      <!-- Étape 3 bis : code reçu par e-mail -->
-      <form id="lgOtp" hidden autocomplete="off">
-        <button type="button" class="lg-back" data-back="3"><i data-lucide="arrow-left"></i> Ce n'est pas moi</button>
-        <div class="lg-who" id="lgOtpWho"></div>
-        <p class="lg-h lg-left" id="lgOtpH"></p>
-        <div class="otp" id="otpBox">
-          <input inputmode="numeric" maxlength="1" aria-label="Chiffre 1">
-          <input inputmode="numeric" maxlength="1" aria-label="Chiffre 2">
-          <input inputmode="numeric" maxlength="1" aria-label="Chiffre 3">
-          <input inputmode="numeric" maxlength="1" aria-label="Chiffre 4">
-        </div>
-        <div class="otp-t" id="otpTimer"></div>
-        <button class="btn bp lg-go" type="submit" id="otpGo"><i data-lucide="log-in"></i> Valider et accéder</button>
-        <button type="button" class="lg-renvoi" id="otpRenvoi"><i data-lucide="refresh-cw"></i> Générer un nouveau code</button>
-      </form>
-
-      <div class="lg-err" id="lgErr" role="alert"></div>
+      <p class="lg-foot">Un souci pour vous connecter ? Contactez votre responsable.</p>
     </div>
   </div>
 </section>
@@ -110,32 +102,39 @@
 <!-- ================= APPLICATION ================= -->
 <div class="shell" id="app" hidden>
   <aside class="sb" id="sb">
-    <div class="sb-head"><img src="assets/img/logo-qfs.png" alt="Quipux Financial Services"></div>
+    <div class="sb-head">
+      <img src="assets/img/logo-qfs.png" alt="Quipux Financial Services">
+      <button type="button" class="ibtn sb-close" id="sbClose" aria-label="Fermer le menu"><i data-lucide="x"></i></button>
+    </div>
+    <div class="sb-camp">
+      <span class="sb-camp-i"><i data-lucide="calendar-range"></i></span>
+      <div><b data-cfg="CAMPAGNE"></b><small id="sbCamp">Expression des besoins</small></div>
+    </div>
     <nav class="sb-nav" id="sbNav">
-      <p class="sb-lbl" data-cfg="CAMPAGNE"></p>
+      <p class="sb-lbl bo-only">Validation</p>
       <button type="button" class="sb-a bo-only" data-view="valider"><i data-lucide="stamp"></i>À valider<span class="sb-n" id="nbValider" hidden></span></button>
-      <button type="button" class="sb-a" data-view="nouveau"><i data-lucide="circle-plus"></i>Exprimer un besoin<span class="sb-n" id="sbCart" hidden></span></button>
-      <button type="button" class="sb-a" data-view="mes"><i data-lucide="list-checks"></i><span id="sbMes">Mes besoins</span></button>
       <button type="button" class="sb-a bo-only" data-view="tdb"><i data-lucide="layout-dashboard"></i>Tableau de bord</button>
+      <p class="sb-lbl">Mon espace</p>
+      <button type="button" class="sb-a" data-view="nouveau"><i data-lucide="circle-plus"></i>Exprimer un besoin<span class="sb-n sb-n-cart" id="sbCart" hidden title="Articles dans ma demande, pas encore envoyée"></span></button>
+      <button type="button" class="sb-a" data-view="mes"><i data-lucide="list-checks"></i><span id="sbMes">Mes besoins</span></button>
     </nav>
     <div class="sb-foot">
       <div class="sb-user">
         <span class="sb-av" id="sbAv"></span>
         <span class="sb-id"><b id="sbName"></b><small id="sbRole"></small></span>
+        <button type="button" class="sb-out" id="btnLogout" title="Se déconnecter" aria-label="Se déconnecter"><i data-lucide="log-out"></i></button>
       </div>
-      <button type="button" class="sb-out" id="btnLogout"><i data-lucide="log-out"></i>Se déconnecter</button>
     </div>
   </aside>
   <div class="sb-ov" id="sbOv"></div>
 
   <div class="ctn">
     <header class="top">
-      <button type="button" class="ibtn" id="sbToggle" aria-label="Afficher le menu"><i data-lucide="panel-left"></i></button>
-      <span class="top-sep"></span>
+      <button type="button" class="ibtn" id="sbToggle" aria-label="Afficher le menu"><i data-lucide="menu"></i></button>
       <nav class="bc" aria-label="Fil d'Ariane"><span data-cfg="CAMPAGNE"></span><i data-lucide="chevron-right"></i><b id="bcVue"></b></nav>
       <div class="top-r">
         <span class="tfi" id="tbSync"></span>
-        <button type="button" class="ibtn" id="btnRefresh" title="Actualiser les données"><i data-lucide="refresh-cw"></i></button>
+        <button type="button" class="ibtn" id="btnRefresh" title="Actualiser les données" aria-label="Actualiser les données"><i data-lucide="refresh-cw"></i></button>
       </div>
     </header>
 
@@ -146,22 +145,28 @@
       <section class="view" data-view="nouveau" hidden>
         <header class="vh">
           <div>
+            <p class="vh-e" id="nvHello"></p>
             <h1 class="vh-t">Exprimer un besoin</h1>
-            <p class="vh-s" id="nvSub">Cliquez sur les articles dont vous avez besoin, complétez chaque ligne puis envoyez votre demande.</p>
+            <p class="vh-s">Choisissez un article, précisez votre besoin, puis envoyez votre demande pour validation.</p>
           </div>
+          <ol class="flow" id="nvFlow" aria-label="Étapes">
+            <li data-f="1"><span>1</span>Choisir</li>
+            <li data-f="2"><span>2</span>Préciser</li>
+            <li data-f="3"><span>3</span>Envoyer</li>
+          </ol>
         </header>
         <div class="nv">
           <div class="nv-cat">
             <div class="nv-tools">
-              <div class="seg" id="nvCats" role="tablist"></div>
+              <div class="seg" id="nvCats" role="tablist" aria-label="Catégories"></div>
               <div class="sbx"><i data-lucide="search" class="si"></i><input type="search" id="nvSearch" placeholder="Rechercher un article…" autocomplete="off" aria-label="Rechercher un article"></div>
             </div>
-            <div class="lock" id="nvLock" hidden></div>
+            <p class="cat-aide" id="nvAide"></p>
             <div class="tiles" id="nvTiles"></div>
           </div>
           <aside class="dem" id="nvDem">
             <div class="dem-h">
-              <div><h2 class="dem-t"><i data-lucide="clipboard-list"></i>Ma demande</h2><p class="cs" id="demSub"></p></div>
+              <div><h2 class="dem-t"><i data-lucide="clipboard-list"></i>Ma demande<i id="demN" hidden></i></h2><p class="cs" id="demSub"></p></div>
               <button type="button" class="dem-vider" id="demVider" hidden><i data-lucide="trash-2"></i>Tout retirer</button>
             </div>
             <div class="dem-l" id="demLignes"></div>
@@ -172,7 +177,7 @@
             </div>
           </aside>
         </div>
-        <button type="button" class="nv-bar" id="nvBar" hidden><span><i data-lucide="clipboard-list"></i><b id="nvBarN">0</b> besoin(s) dans ma demande</span><span>Voir et envoyer<i data-lucide="arrow-down"></i></span></button>
+        <button type="button" class="nv-bar" id="nvBar" hidden><span><i data-lucide="clipboard-list"></i><b id="nvBarN">0</b>&nbsp;article(s) dans ma demande</span><span class="nv-bar-go">Envoyer<i data-lucide="arrow-down"></i></span></button>
       </section>
 
       <!-- ============ VUE : MES BESOINS (suivi) ============ -->
@@ -187,10 +192,10 @@
             <button type="button" class="btn bp" data-goto="nouveau"><i data-lucide="plus"></i>Nouveau besoin</button>
           </div>
         </header>
-        <div class="stats" id="mesStats"></div>
-        <div class="tcl">
-          <div class="chips" id="mesChips"></div>
-          <div class="sbx"><i data-lucide="search" class="si"></i><input type="search" id="mesSearch" placeholder="Rechercher un article, une référence…" aria-label="Rechercher dans mes besoins"></div>
+        <div class="mes-sum" id="mesStats"></div>
+        <div class="tcl mes-tools">
+          <h2 class="sh-t" id="mesListeT">Mes demandes</h2>
+          <div class="sbx"><i data-lucide="search" class="si"></i><input type="search" id="mesSearch" placeholder="Rechercher un article, une date, une référence…" aria-label="Rechercher dans mes besoins"></div>
         </div>
         <div class="grp-l" id="mesListe"></div>
       </section>
@@ -204,6 +209,7 @@
           </div>
           <button type="button" class="btn bo" data-export><i data-lucide="file-spreadsheet"></i>Exporter les validés</button>
         </header>
+        <div class="val-sum" id="valSum"></div>
         <div class="tcl">
           <div class="chips" id="valTabs"></div>
           <select id="valSite" class="in in-sm" aria-label="Filtrer par site"></select>
@@ -223,141 +229,177 @@
           <button type="button" class="btn bo" data-export><i data-lucide="file-spreadsheet"></i>Exporter les validés</button>
         </header>
 
-      <!-- Filtres -->
-      <div class="card flt">
-        <div class="fg bo-only">
-          <label for="fVue">Afficher</label>
-          <select id="fVue" class="in">
-            <option value="a_valider">Besoins que je valide</option>
-            <option value="valides_moi">Validés par moi</option>
-            <option value="mes">Mes propres besoins</option>
-            <option value="tout">Tous les besoins visibles</option>
-          </select>
-        </div>
-        <div class="fg bo-only">
-          <label for="fSite">Site</label>
-          <select id="fSite" class="in"></select>
-        </div>
-        <div class="fg">
-          <label for="fCat">Catégorie</label>
-          <select id="fCat" class="in"></select>
-        </div>
-        <div class="fg">
-          <label for="fType">Type de besoin</label>
-          <select id="fType" class="in"></select>
-        </div>
-        <button type="button" class="btn bo" id="fReset"><i data-lucide="rotate-ccw"></i>Réinitialiser</button>
-      </div>
+        <nav class="tdb-nav" id="tdbNav" aria-label="Sections du tableau de bord">
+          <a href="#sec-kpi" data-sec="sec-kpi"><i data-lucide="gauge"></i>Vue d'ensemble</a>
+          <a href="#sec-graph" data-sec="sec-graph"><i data-lucide="chart-column"></i>Graphiques</a>
+          <a href="#sec-reg" data-sec="sec-reg"><i data-lucide="table-2"></i>Registre</a>
+          <a href="#sec-synth" data-sec="sec-synth"><i data-lucide="map-pin"></i>Par site</a>
+          <a href="#sec-art" data-sec="sec-art"><i data-lucide="package"></i>Articles consolidés</a>
+        </nav>
 
-      <!-- Indicateurs -->
-      <section id="sec-kpi">
-        <div class="sh"><h2 class="sh-t">Indicateurs clés</h2><span class="sh-r" id="shPeriode"></span></div>
-        <div class="kg" id="kpis"></div>
-      </section>
-
-      <!-- Progression -->
-      <div class="card">
-        <div class="pt">
-          <div>
-            <h2 class="ct">Avancement de la validation</h2>
-            <p class="cs" id="psum"></p>
-          </div>
-          <span class="pc-pct" id="gPct">0%</span>
-        </div>
-        <div class="sw" id="swrap"></div>
-        <div class="sl" id="sLegend"></div>
-      </div>
-
-      <!-- Graphiques -->
-      <section>
-        <div class="sh"><h2 class="sh-t">Analyse graphique</h2></div>
-        <div class="cg">
-          <div class="card"><h3 class="ct">Quantités demandées par catégorie et par statut</h3><p class="cs">Nombre d'unités demandées sur la période</p><div class="ch"><canvas id="cCat"></canvas></div></div>
-          <div class="card"><h3 class="ct">Répartition par statut</h3><p class="cs">Lignes de besoin</p><div class="ch"><canvas id="cStatut"></canvas></div></div>
-          <div class="card"><h3 class="ct">Articles les plus demandés</h3><p class="cs">Top 10 en quantité (hors rejets)</p><div class="ch"><canvas id="cTop"></canvas></div></div>
-          <div class="card"><h3 class="ct">Répartition par type de besoin</h3><p class="cs">Quantités (hors rejets)</p><div class="ch"><canvas id="cType"></canvas></div></div>
-        </div>
-        <div class="card bo-only cc-full">
-          <h3 class="ct">Quantités demandées par site et par catégorie</h3><p class="cs">Sites ayant exprimé au moins un besoin (hors rejets)</p>
-          <div class="ch" id="cSiteWrap"><canvas id="cSite"></canvas></div>
-        </div>
-      </section>
-
-      <!-- Registre -->
-      <section id="sec-reg">
-        <div class="sh"><h2 class="sh-t" id="regTitle">Registre des besoins</h2></div>
-        <div class="card">
-          <div class="tcl">
-            <div class="chips" id="chips"></div>
-            <div class="sbx"><i data-lucide="search" class="si"></i><input type="search" id="srch" placeholder="Rechercher (n°, article, service, bénéficiaire, motif…)" aria-label="Rechercher dans le registre"></div>
-            <select id="tri" class="in in-sm" aria-label="Trier">
-              <option value="recent">Plus récents d'abord</option>
-              <option value="ancien">Plus anciens d'abord</option>
-              <option value="qte">Quantité décroissante</option>
-              <option value="maj">Dernière mise à jour</option>
+        <!-- Filtres -->
+        <div class="card flt">
+          <div class="fg">
+            <label for="fVue">Afficher</label>
+            <select id="fVue" class="in">
+              <option value="a_valider">Besoins que je valide</option>
+              <option value="valides_moi">Validés par moi</option>
+              <option value="mes">Mes propres besoins</option>
+              <option value="tout">Tous les besoins visibles</option>
             </select>
-            <span class="rc" id="rc"></span>
           </div>
-          <div class="bulk bo-only" id="bulk" hidden>
-            <span id="bulkN"></span>
-            <button type="button" class="btn bo btn-sm" id="bulkOk"><i data-lucide="check"></i>Valider la sélection</button>
-            <button type="button" class="btn bo btn-sm" id="bulkKo"><i data-lucide="x"></i>Rejeter la sélection</button>
-            <button type="button" class="lk" id="bulkClear">Annuler</button>
+          <div class="fg">
+            <label for="fSite">Site</label>
+            <select id="fSite" class="in"></select>
           </div>
-          <div class="tw">
-            <table class="tbl">
-              <thead><tr>
-                <th class="bo-only ck"><input type="checkbox" id="ckAll" aria-label="Tout sélectionner"></th>
-                <th>N°</th><th>Saisi le</th><th class="bo-only">Site / demandeur</th><th>Catégorie</th><th>Article</th>
-                <th class="num">Qté</th><th>Type</th><th>Équipement actuel</th><th>Motif</th><th>Statut</th><th class="num">Qté validée</th>
-              </tr></thead>
-              <tbody id="tbody"></tbody>
-            </table>
-            <div class="nd" id="nd" hidden><i data-lucide="inbox"></i><span id="ndTxt">Aucun besoin ne correspond aux critères sélectionnés.</span></div>
-            <div class="more" id="more" hidden><button type="button" class="btn bo" id="btnMore">Afficher plus</button></div>
+          <div class="fg">
+            <label for="fCat">Catégorie</label>
+            <select id="fCat" class="in"></select>
           </div>
+          <div class="fg">
+            <label for="fType">Type de besoin</label>
+            <select id="fType" class="in"></select>
+          </div>
+          <button type="button" class="btn bo" id="fReset"><i data-lucide="rotate-ccw"></i>Réinitialiser</button>
         </div>
-      </section>
 
-      <!-- Synthèse par site (Back Office) -->
-      <section class="bo-only" id="sec-synth">
-        <div class="sh"><h2 class="sh-t">Synthèse par site</h2><span class="sh-r">Cliquez sur une ligne pour filtrer</span></div>
-        <div class="card">
-          <div class="tw">
-            <table class="tbl" id="tSynth">
-              <thead><tr>
-                <th>Site</th><th class="num">Lignes</th><th class="num">Informatique</th><th class="num">Mobilier</th><th class="num">Achats</th>
-                <th class="num">Qté totale</th><th class="num">En attente</th><th class="num">Validées</th><th class="num">Rejetées</th>
-                <th style="min-width:150px">Taux de validation</th><th>Dernière saisie</th>
-              </tr></thead>
-              <tbody></tbody>
-            </table>
+        <!-- Vue d'ensemble -->
+        <section class="tdb-sec" id="sec-kpi">
+          <div class="kg" id="kpis"></div>
+          <div class="card">
+            <div class="pt">
+              <div>
+                <h2 class="ct">Avancement de la validation</h2>
+                <p class="cs" id="psum"></p>
+              </div>
+              <span class="pc-pct" id="gPct">0%</span>
+            </div>
+            <div class="sw" id="swrap"></div>
+            <div class="sl" id="sLegend"></div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      <!-- Articles consolidés -->
-      <section id="sec-art" class="bo-only">
-        <div class="sh"><h2 class="sh-t">Articles consolidés</h2><span class="sh-r" id="artSub">Liste d'achat — hors rejets</span></div>
-        <div class="card">
-          <div class="tcl"><div class="chips" id="artChips"></div><span class="rc" id="artRc"></span></div>
-          <div class="tw">
-            <table class="tbl" id="tArt">
-              <thead><tr>
-                <th>Catégorie</th><th>Article</th><th class="num bo-only">Sites</th><th class="num">Lignes</th>
-                <th class="num">Qté demandée</th><th class="num">Qté validée</th><th class="num">En attente</th>
-              </tr></thead>
-              <tbody></tbody>
-            </table>
+        <!-- Graphiques -->
+        <section class="tdb-sec" id="sec-graph">
+          <div class="sh"><h2 class="sh-t">Analyse graphique</h2></div>
+          <div class="cg">
+            <div class="card"><h3 class="ct">Quantités demandées par catégorie et par statut</h3><p class="cs">Nombre d'unités demandées</p><div class="ch"><canvas id="cCat"></canvas></div></div>
+            <div class="card"><h3 class="ct">Répartition par statut</h3><p class="cs">Lignes de besoin</p><div class="ch"><canvas id="cStatut"></canvas></div></div>
+            <div class="card"><h3 class="ct">Articles les plus demandés</h3><p class="cs">Top 10 en quantité (hors rejets)</p><div class="ch"><canvas id="cTop"></canvas></div></div>
+            <div class="card"><h3 class="ct">Répartition par type de besoin</h3><p class="cs">Quantités (hors rejets)</p><div class="ch"><canvas id="cType"></canvas></div></div>
           </div>
-        </div>
-      </section>
+          <div class="card">
+            <h3 class="ct">Quantités demandées par site et par catégorie</h3><p class="cs">Sites ayant exprimé au moins un besoin (hors rejets)</p>
+            <div class="ch" id="cSiteWrap"><canvas id="cSite"></canvas></div>
+          </div>
+        </section>
 
+        <!-- Registre -->
+        <section class="tdb-sec" id="sec-reg">
+          <div class="sh"><h2 class="sh-t" id="regTitle">Registre des besoins</h2></div>
+          <div class="card">
+            <div class="tcl">
+              <div class="chips" id="chips"></div>
+              <div class="sbx"><i data-lucide="search" class="si"></i><input type="search" id="srch" placeholder="Rechercher (n°, article, demandeur, motif…)" aria-label="Rechercher dans le registre"></div>
+              <select id="tri" class="in in-sm" aria-label="Trier">
+                <option value="recent">Plus récents d'abord</option>
+                <option value="ancien">Plus anciens d'abord</option>
+                <option value="qte">Quantité décroissante</option>
+                <option value="maj">Dernière mise à jour</option>
+              </select>
+              <span class="rc" id="rc"></span>
+            </div>
+            <div class="bulk" id="bulk" hidden>
+              <span id="bulkN"></span>
+              <button type="button" class="btn bo btn-sm" id="bulkOk"><i data-lucide="check"></i>Valider la sélection</button>
+              <button type="button" class="btn bo btn-sm" id="bulkKo"><i data-lucide="x"></i>Rejeter la sélection</button>
+              <button type="button" class="lk" id="bulkClear">Annuler</button>
+            </div>
+            <div class="tw">
+              <table class="tbl">
+                <thead><tr>
+                  <th class="ck"><input type="checkbox" id="ckAll" aria-label="Tout sélectionner"></th>
+                  <th>N°</th><th>Saisi le</th><th>Site / demandeur</th><th>Catégorie</th><th>Article</th>
+                  <th class="num">Qté</th><th>Type</th><th>Équipement actuel</th><th>Motif</th><th>Statut</th><th class="num">Qté validée</th>
+                </tr></thead>
+                <tbody id="tbody"></tbody>
+              </table>
+              <div class="nd" id="nd" hidden><i data-lucide="inbox"></i><span id="ndTxt">Aucun besoin ne correspond aux critères sélectionnés.</span></div>
+              <div class="more" id="more" hidden><button type="button" class="btn bo" id="btnMore">Afficher plus</button></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Synthèse par site -->
+        <section class="tdb-sec" id="sec-synth">
+          <div class="sh"><h2 class="sh-t">Synthèse par site</h2><span class="sh-r">Cliquez sur une ligne pour filtrer le tableau de bord sur ce site</span></div>
+          <div class="card">
+            <div class="tw">
+              <table class="tbl" id="tSynth">
+                <thead><tr>
+                  <th>Site</th><th class="num">Lignes</th><th class="num">Informatique</th><th class="num">Mobilier</th><th class="num">Achats</th>
+                  <th class="num">Qté totale</th><th class="num">En attente</th><th class="num">Validées</th><th class="num">Rejetées</th>
+                  <th style="min-width:150px">Taux de validation</th><th>Dernière saisie</th>
+                </tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- Articles consolidés -->
+        <section class="tdb-sec" id="sec-art">
+          <div class="sh"><h2 class="sh-t">Articles consolidés</h2><span class="sh-r" id="artSub">Liste d'achat, hors rejets — cliquez sur un article pour voir ses lignes dans le registre</span></div>
+          <div class="card">
+            <div class="tcl">
+              <div class="chips" id="artChips"></div>
+              <div class="leg"><span><i style="background:#047857"></i>Validé</span><span><i style="background:#ea580c"></i>En attente</span><span><i style="background:#e2e8f0"></i>Non retenu</span></div>
+            </div>
+            <div class="tw">
+              <table class="tbl" id="tArt">
+                <thead><tr>
+                  <th>Article</th><th>Catégorie</th><th class="num">Sites</th><th class="num">Lignes</th>
+                  <th class="num">Qté demandée</th><th class="num">Qté validée</th><th class="num">En attente</th><th>Répartition</th>
+                </tr></thead>
+                <tbody></tbody>
+                <tfoot></tfoot>
+              </table>
+            </div>
+          </div>
+        </section>
       </section>
 
       <footer class="ft" id="ftText"></footer>
     </main>
   </div>
+
+  <!-- Barre d'onglets (téléphone) -->
+  <nav class="bn" id="bn" aria-label="Navigation principale">
+    <button type="button" class="bo-only" data-view="valider"><i data-lucide="stamp"></i>À valider<i id="bnValider" hidden></i></button>
+    <button type="button" data-view="nouveau"><i data-lucide="circle-plus"></i>Exprimer<i class="cart" id="bnCart" hidden></i></button>
+    <button type="button" data-view="mes"><i data-lucide="list-checks"></i><span id="bnMes">Mes besoins</span></button>
+    <button type="button" class="bo-only" data-view="tdb"><i data-lucide="layout-dashboard"></i>Tableau</button>
+  </nav>
+</div>
+
+<!-- ================= FICHE ARTICLE (ajout / modification d'une ligne) ================= -->
+<div class="as" id="as" hidden role="dialog" aria-modal="true" aria-labelledby="asT">
+  <form class="as-box" id="asForm" novalidate>
+    <header class="as-h" id="asH">
+      <span class="as-ic" id="asIc"></span>
+      <div><p class="as-c" id="asC"></p><h2 class="as-t" id="asT"></h2></div>
+      <button type="button" class="pcl" id="asX" aria-label="Fermer"><i data-lucide="x"></i></button>
+    </header>
+    <div class="as-b" id="asB"></div>
+    <footer class="as-f">
+      <p class="as-m" id="asM"></p>
+      <div class="as-fb">
+        <button type="button" class="btn btn-danger" id="asDel" hidden><i data-lucide="trash-2"></i>Retirer</button>
+        <button type="button" class="btn bo" id="asNo">Annuler</button>
+        <button type="submit" class="btn bp" id="asOk"></button>
+      </div>
+    </footer>
+  </form>
 </div>
 
 <!-- ================= PANNEAU DÉTAIL ================= -->

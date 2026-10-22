@@ -14,12 +14,15 @@ Il s'agit d'un site statique (HTML/CSS/JS, Chart.js, SheetJS, icônes Lucide) pu
 
 ## Fonctionnalités
 
-### Connexion : poste → site → accès
-1. **Poste** : Caissière ordinaire, Caissière E-money (en agence) ou Opérateur, Assistant, Chef, Responsable, Manager (au siège).
-2. **Site** : les caissières choisissent leur site parmi les 41 (ABATTA, ABOBO, ANGRE, BOUAKE, PONT FHB… COSMOS). Les postes du siège sont rattachés au **SIEGE**.
-3. **Accès** :
-   - **Caissières** : si des caissières sont déjà enregistrées pour ce site et ce poste, l'écran propose « Je suis… » avec leurs noms. Sinon, ou via « Je ne suis pas dans la liste », la caissière saisit son nom, qui sera proposé aux connexions suivantes (onglet `Agents`). L'accès est direct.
-   - **Postes du siège** : la personne choisit son nom. Un **code à 4 chiffres** est envoyé à son adresse e-mail. Il est valable **5 minutes**, et 5 essais sont autorisés. Une fois le délai passé, le code expire et il faut en générer un nouveau. Sans le bon code, l'accès est refusé.
+### Connexion
+Le parcours compte toujours 3 étapes, indiquées en haut de la carte de connexion :
+
+- **En agence** (Caissière ordinaire, Caissière E-money) : **Poste → Site → Identité**, accès direct.
+  1. La caissière choisit son site parmi les 41 (ABATTA, ABOBO, ANGRE, BOUAKE, PONT FHB… COSMOS), avec une recherche.
+  2. Si des caissières sont déjà enregistrées pour ce site et ce poste, elle touche son nom. Sinon, ou via « Je ne suis pas dans la liste », elle saisit son nom, qui sera proposé aux connexions suivantes (onglet `Agents`).
+- **Au siège** (Opérateur, Assistant, Chef, Responsable, Manager) : **Poste → Identité → Code**. Le site est toujours le **SIEGE**, il n'y a donc pas d'étape « site ».
+  1. La personne choisit son nom.
+  2. Un **code à 4 chiffres** est envoyé à son adresse e-mail. Il est valable **5 minutes**, et 5 essais sont autorisés. Une fois le délai passé, le code expire et il faut en demander un nouveau. Sans le bon code, l'accès est refusé.
 
 La session reste ouverte sur l'appareil jusqu'à « Se déconnecter » (6 h maximum d'inactivité côté serveur).
 
@@ -39,10 +42,14 @@ Chacun arrive directement sur ce qu'il vient faire :
 
 | Écran | Pour qui | Contenu |
 |---|---|---|
-| **Exprimer un besoin** | Tous (écran d'accueil des agents) | Catalogue d'articles par catégorie (Informatique, Mobilier, Achats) avec recherche. Un clic coche l'article et l'ajoute à **Ma demande**, à droite. Un nouveau clic le décoche. Tant que l'article en cours n'est pas complété, les autres tuiles sont verrouillées. Chaque ligne se complète sur place : quantité, type de besoin, équipement actuel si besoin, motif (avec motifs proposés en un clic), caractéristiques facultatives. Une ligne incomplète est signalée en orange. L'envoi n'est possible que lorsque tout est complet. « Tout retirer », le retrait d'un article déjà renseigné et l'envoi passent par une fenêtre de confirmation, et l'envoi se termine par une fenêtre récapitulative avec la référence. La demande en cours est conservée sur l'appareil. |
-| **Mes besoins** / **Besoins du site** | Tous | Les demandes regroupées par référence, avec le statut de chaque ligne, la quantité validée, le nom du valideur et le motif en cas de rejet. Un besoin encore en attente peut être retiré. |
-| **À valider** | Zeinab Kone, Yaya Comara, Managers (écran d'accueil) | Les demandes regroupées par demandeur. Pour chaque ligne : motif, équipement actuel, quantité validée modifiable, boutons **Valider** et **Rejeter** (le motif du rejet est obligatoire). **Tout valider** traite une demande en un clic. L'onglet *Déjà traités* permet de revenir sur une décision. |
-| **Tableau de bord** | Valideurs | Indicateurs, graphiques, registre complet avec décision groupée, synthèse par site, articles consolidés. |
+| **Exprimer un besoin** | Tous (écran d'accueil des agents) | Catalogue d'articles par catégorie (Informatique, Mobilier, Achats) avec recherche, et un repère « Choisir → Préciser → Envoyer ». Un clic sur un article ouvre sa **fiche** (panneau bas sur téléphone) : quantité, type de besoin, équipement actuel si besoin, motif (avec motifs proposés en un clic), caractéristiques facultatives. L'article n'entre dans **Ma demande** qu'une fois la fiche complète ; ce qui manque est indiqué au pied de la fiche. Un article déjà ajouté se rouvre pour être modifié ou retiré. « Tout retirer », le retrait d'un article déjà renseigné et l'envoi passent par une fenêtre de confirmation, et l'envoi se termine par une fenêtre récapitulative avec la référence. La demande en cours est conservée sur l'appareil. |
+| **Mes besoins** / **Besoins du site** | Tous | Une synthèse (part des articles examinés, compteurs *Tous / En attente / Validés / Rejetés* qui servent aussi de filtres), puis une carte par demande : date d'envoi, référence, état global (*En attente*, *En cours*, *Validée*, *Rejetée*, *Traitée*) et, pour chaque article, quantité demandée et validée, statut, valideur et motif en cas de rejet. Un besoin encore en attente peut être retiré. |
+| **À valider** | Zeinab Kone, Yaya Comara, Managers (écran d'accueil) | Un résumé (besoins en attente, demandeurs, besoins en attente depuis plus de `SEUIL_ATTENTE_JOURS`), puis les demandes regroupées par demandeur. Pour chaque ligne : motif, équipement actuel, quantité validée modifiable, boutons **Valider** et **Rejeter** (le motif du rejet est obligatoire). **Tout valider** traite une demande en un clic. L'onglet *Déjà traités* permet de revenir sur une décision. |
+| **Tableau de bord** | Valideurs | Un sous-menu fixe mène à chaque section : vue d'ensemble (indicateurs, avancement), graphiques, registre complet avec décision groupée, synthèse par site, articles consolidés (avec la répartition validé / en attente / non retenu et une ligne de total). |
+
+**Référence d'une demande** : à chaque envoi, le serveur attribue une référence `B27-0001`, `B27-0002`… (**B** = Besoins, **27** = Budget 2027, puis le numéro d'ordre). Chaque article de la demande reçoit un suffixe : `B27-0001-01`, `B27-0001-02`…
+
+**Liens directs** : chaque écran a sa propre adresse, utilisable dans un e-mail ou un favori : `#nouveau`, `#mes`, `#valider`, `#tdb`, et les sections du tableau de bord `#sec-kpi`, `#sec-graph`, `#sec-reg`, `#sec-synth`, `#sec-art`. Après la connexion, la personne arrive directement sur l'écran demandé (si son poste y a accès). Le bouton « Précédent » du navigateur revient à l'écran précédent.
 
 Pour un *Remplacement d'équipement défectueux* ou un *Renouvellement*, l'**année d'acquisition** et l'**état de l'équipement actuel** sont obligatoires (états : Hors service, En panne (réparable), Défectueux / fonctionne mal, Usé / vétuste, Fonctionnel).
 
@@ -53,7 +60,7 @@ Pour un *Remplacement d'équipement défectueux* ou un *Renouvellement*, l'**ann
 - L'export est toujours complet (sans tenir compte des filtres de l'écran). Il contient trois onglets : Besoins validés, Articles consolidés, Synthèse par site.
 
 ### Pour tous
-- Utilisable sur ordinateur et sur téléphone.
+- Utilisable sur ordinateur et sur téléphone. Sur téléphone, une barre d'onglets en bas d'écran donne accès aux écrans principaux.
 
 ### Statuts
 

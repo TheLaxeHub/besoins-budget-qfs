@@ -35,6 +35,7 @@
     synchro: null,
     panier: [],
     vue: null,
+    secCible: null,
   };
 
   /* ================= Utilitaires ================= */
@@ -61,6 +62,7 @@
   const peutDecider = function (b) { return !!S.session && Store.peutDecider(S.session, b); };
   const estMien = function (b) { return !!S.session && Store.estMien(S.session, b); };
   const valideurTxt = function (b) { const v = Store.valideurDe(b); return v === 'Managers' ? 'les managers' : v || 'non désigné'; };
+  const monValideur = function () { return valideurTxt({ poste: S.session.poste, demandeur: S.session.nom, demandeur_id: S.session.id }); };
   const equipTxt = function (b) { return b.annee_acquisition || b.etat_actuel ? [b.annee_acquisition ? 'Acquis en ' + b.annee_acquisition : '', b.etat_actuel].filter(Boolean).join(' · ') : ''; };
   const valideParMoi = function (b) { return !!S.session && b.traite_par_id === S.session.id && !!S.session.id; };
   const cleUser = function () { return (S.session.id || (S.session.site + '_' + S.session.nom)).toLowerCase(); };
@@ -68,8 +70,8 @@
   const parId = function (id) { return S.besoins.find(function (b) { return b.id === id; }); };
   const cat = function (code) { return CATS.find(function (c) { return c.code === code; }) || { code: code, libelle: code, ico: 'package', couleur: '#6b7280', articles: [] }; };
   const qteRetenue = function (b) { return b.statut === 'VALIDE' ? Number(b.quantite_validee) || 0 : b.statut === 'REJETE' ? 0 : Number(b.quantite) || 0; };
-  const nomCourt = function (site) { return String(site).replace(/^CGI /, ''); };
   const somme = function (l, f) { return l.reduce(function (s, x) { return s + (Number(f(x)) || 0); }, 0); };
+  const estCaisse = function () { return !(posteDef(S.session.poste) || {}).siege; };
 
   const badgeStatut = function (s) {
     const d = STATUTS[s] || STATUTS.EN_ATTENTE;
@@ -92,6 +94,13 @@
     toastTimer = setTimeout(function () { t.className = 'toast'; }, type === 'err' ? 5000 : 3000);
   }
   function chargement(on) { $('#loader').hidden = !on; }
+
+  // Date limite de saisie : { d, j } (j = jours restants) ou null.
+  function dateLimite() {
+    const d = C.DATE_LIMITE ? new Date(C.DATE_LIMITE + 'T23:59:59') : null;
+    if (!d || isNaN(d)) return null;
+    return { d: d, j: Math.ceil((d - Date.now()) / 864e5) };
+  }
 
   // Popup de confirmation : confirmer({ titre, texte, extra, ok, okIco, annuler, ico, ton: 'info'|'danger'|'success' }) → Promise<boolean>
   let cfResolve = null;
@@ -135,7 +144,9 @@
   const clePanier = function () { return 'bud27_panier_' + cleUser(); };
   const typesDe = function (code) { return cat(code).types || C.TYPES_BESOIN; };
 
-  /* ================= Connexion : poste → site → accès ================= */
+  /* ================= Connexion ================= */
+  // En agence : Poste → Site → Identité (accès direct).
+  // Au siège  : Poste → Identité → Code reçu par e-mail (le site est toujours le SIEGE, pas d'étape « site »).
 
   const L = { etape: 1, poste: null, site: '', nom: '', annuaire: null, minuteur: null, expire: 0 };
   const posteDef = function (lib) { return C.POSTES.find(function (p) { return p.libelle === lib; }); };
@@ -145,11 +156,17 @@
     document.title = C.APP_TITRE + ' — QFS';
     $('#lgConf').hidden = Store.configure;
     const carte = function (p) {
-      return '<button type="button" class="lg-role" data-poste="' + esc(p.libelle) + '">' + ico(p.ico || 'user') +
+      return '<button type="button" class="lg-role" data-poste="' + esc(p.libelle) + '"><span class="lg-role-i">' + ico(p.ico || 'user') + '</span>' +
         '<b>' + esc(p.libelle) + '</b><small>' + esc(p.aide || '') + '</small></button>';
     };
     $('#lgRolesSite').innerHTML = C.POSTES.filter(function (p) { return !p.siege; }).map(carte).join('');
     $('#lgRolesSiege').innerHTML = C.POSTES.filter(function (p) { return p.siege; }).map(carte).join('');
+    const dl = dateLimite();
+    $('#lgDl').hidden = !dl;
+    if (dl) {
+      $('#lgDl').innerHTML = ico('calendar-clock') + '<span>' + (dl.j < 0 ? 'Saisie close depuis le <b>' + fDate(dl.d) + '</b>.'
+        : 'Saisie ouverte jusqu\'au <b>' + fDate(dl.d) + '</b>' + (dl.j === 0 ? " — c'est aujourd'hui !" : ' — encore ' + dl.j + ' jour(s).')) + '</span>';
+    }
     dessinerGrille('');
     icones();
 
@@ -158,9 +175,8 @@
       if (!b) return;
       L.poste = posteDef(b.dataset.poste);
       L.site = L.poste.siege ? C.SITE_SIEGE : '';
-      etapeConnexion(2);
+      etapeConnexion(L.poste.siege ? 3 : 2);
     });
-    $('#lgSiegeOk').addEventListener('click', function () { L.site = C.SITE_SIEGE; etapeConnexion(3); });
     $('#lgSearch').addEventListener('input', function (e) { dessinerGrille(e.target.value); });
     $('#lgSearch').addEventListener('keydown', function (e) {
       if (e.key !== 'Enter') return;
@@ -182,7 +198,11 @@
       if (b) connexionSite(b.dataset.agent);
     });
     $('#lgPasLa').addEventListener('click', function () { afficherNomLibre(true); });
-    $('#lgListe').addEventListener('click', function () { $('#lgConnus').hidden = false; $('#lgNomForm').hidden = true; $('#lgQuiH').textContent = L.poste.libelle + ' · ' + L.site + ' — qui êtes-vous parmi les personnes déjà enregistrées ?'; });
+    $('#lgListe').addEventListener('click', function () {
+      $('#lgConnus').hidden = false;
+      $('#lgNomForm').hidden = true;
+      $('#lgQuiH').innerHTML = enteteQui() + ' — touchez votre nom.';
+    });
     $('#lgPeople').addEventListener('click', function (e) {
       const b = e.target.closest('[data-nom]');
       if (!b) return;
@@ -216,37 +236,39 @@
     const n = sansAccents(q).trim();
     const sites = C.SITES.filter(function (p) { return !n || sansAccents(p).includes(n); });
     $('#lgGrid').innerHTML = sites.length
-      ? sites.map(function (p) {
-        return '<button type="button" class="lg-pdv" data-site="' + esc(p) + '"><span class="lg-pin">' + esc(p.charAt(0)) + '</span>' + esc(p) + '</button>';
-      }).join('')
-      : '<div class="lg-none">Aucun site ne correspond.</div>';
+      ? sites.map(function (p) { return '<button type="button" class="lg-pdv" data-site="' + esc(p) + '">' + esc(p) + '</button>'; }).join('')
+      : '<div class="lg-none">Aucun site ne correspond à « ' + esc(q) + ' ».</div>';
   }
+
+  const enteteQui = function () { return '<b>' + esc(L.poste.libelle) + '</b> · <b>' + esc(L.site) + '</b>'; };
 
   async function etapeConnexion(n) {
     L.etape = n;
     $('#lgErr').textContent = '';
+    const siege = !!(L.poste && L.poste.siege);
     $('#lgPoste').hidden = n !== 1 || !Store.configure;
     $('#lgSteps').hidden = !Store.configure;
     $('#lgSite').hidden = n !== 2;
     $('#lgQui').hidden = n !== 3;
     $('#lgOtp').hidden = n !== 4;
+    $('#lgStp2').textContent = siege ? 'Identité' : 'Site';
+    $('#lgStp3').textContent = siege ? 'Code' : 'Identité';
+    const pas = siege && n > 1 ? n - 1 : Math.min(n, 3);
     $$('#lgSteps li').forEach(function (li) {
       const k = Number(li.dataset.s);
-      li.classList.toggle('on', k === Math.min(n, 3));
-      li.classList.toggle('ok', k < Math.min(n, 3));
+      li.classList.toggle('on', k === pas);
+      li.classList.toggle('ok', k < pas);
     });
     if (n === 2) {
-      const siege = L.poste.siege;
-      $('#lgSiteH').textContent = siege
-        ? 'Poste ' + L.poste.libelle + ' : votre site est le ' + C.SITE_SIEGE + '.'
-        : 'Poste ' + L.poste.libelle + ' : sélectionnez votre site.';
-      $('#lgSiteSiege').hidden = !siege;
-      $('#lgSiteListe').hidden = siege;
-      if (!siege) { $('#lgSearch').value = ''; dessinerGrille(''); setTimeout(function () { $('#lgSearch').focus(); }, 50); }
+      $('#lgSiteH').innerHTML = 'Poste <b>' + esc(L.poste.libelle) + '</b> — choisissez votre site parmi les ' + C.SITES.length + '.';
+      $('#lgSearch').value = '';
+      dessinerGrille('');
+      if (window.innerWidth > 700) setTimeout(function () { $('#lgSearch').focus(); }, 50);
     }
     if (n === 3) {
-      const siege = L.poste.siege;
-      $('#lgQuiH').textContent = L.poste.libelle + ' · ' + L.site + (siege ? ' — choisissez votre nom : un code de connexion vous sera envoyé par e-mail.' : '');
+      $('#lgQuiBack').dataset.back = siege ? '1' : '2';
+      $('#lgQuiBack span').textContent = siege ? 'Changer de poste' : 'Changer de site';
+      $('#lgQuiH').innerHTML = enteteQui() + (siege ? ' — choisissez votre nom : un code de connexion vous sera envoyé par e-mail.' : '');
       $('#lgPeople').hidden = !siege;
       $('#lgNomForm').hidden = true;
       $('#lgConnus').hidden = true;
@@ -270,7 +292,7 @@
     }
     const liste = L.annuaire.filter(function (p) { return p.poste === L.poste.libelle; });
     box.innerHTML = liste.length ? liste.map(function (p) {
-      return '<button type="button" class="lg-pdv" data-nom="' + esc(p.nom) + '"><span class="lg-pin">' + esc(p.nom.charAt(0)) + '</span><span>' + esc(p.nom) + '<small>' + esc(p.email) + '</small></span></button>';
+      return '<button type="button" class="lg-pdv" data-nom="' + esc(p.nom) + '"><span class="lg-pin">' + esc(initiales(p.nom)) + '</span><span>' + esc(p.nom) + '<small>' + esc(p.email) + '</small></span></button>';
     }).join('') : '<div class="lg-none">Aucune personne enregistrée pour ce poste.</div>';
   }
 
@@ -285,9 +307,9 @@
     }
     L.agents = agents;
     if (!agents.length) { afficherNomLibre(false); return; }
-    $('#lgQuiH').textContent = L.poste.libelle + ' · ' + L.site + ' — qui êtes-vous parmi les personnes déjà enregistrées ?';
+    $('#lgQuiH').innerHTML = enteteQui() + ' — touchez votre nom.';
     $('#lgAgents').innerHTML = agents.map(function (n) {
-      return '<button type="button" class="lg-pdv" data-agent="' + esc(n) + '"><span class="lg-pin">' + esc(initiales(n)) + '</span><span>' + esc(n) + '<small>Je suis ' + esc(n.split(' ')[0]) + '</small></span></button>';
+      return '<button type="button" class="lg-pdv" data-agent="' + esc(n) + '"><span class="lg-pin">' + esc(initiales(n)) + '</span><span>' + esc(n) + '<small>C\'est moi</small></span></button>';
     }).join('');
     icones();
   }
@@ -296,7 +318,7 @@
     $('#lgConnus').hidden = true;
     $('#lgNomForm').hidden = false;
     $('#lgListe').hidden = !(L.agents && L.agents.length);
-    $('#lgQuiH').textContent = L.poste.libelle + ' · ' + L.site + (depuisListe ? ' — indiquez votre nom : il sera proposé à vos prochaines connexions.' : ' — première connexion sur ce site : indiquez votre nom.');
+    $('#lgQuiH').innerHTML = enteteQui() + (depuisListe ? ' — indiquez votre nom : il vous sera proposé aux prochaines connexions.' : ' — première connexion sur ce site : indiquez votre nom.');
     $('#lgNom').value = '';
     setTimeout(function () { $('#lgNom').focus(); }, 50);
   }
@@ -322,15 +344,15 @@
     try {
       const r = await Store.envoyerCode({ poste: L.poste.libelle, nom: L.nom });
       if (L.etape !== 4) etapeConnexion(4);
-      $('#lgOtpWho').textContent = L.nom;
-      $('#lgOtpH').innerHTML = 'Un code à 4 chiffres vient d\'être envoyé à <b>' + esc(r.email) + '</b>. Saisissez-le ci-dessous.';
+      $('#lgOtpWho').innerHTML = '<span class="lg-pin">' + esc(initiales(L.nom)) + '</span><span><b>' + esc(L.nom) + '</b><small>' + esc(L.poste.libelle) + ' · ' + esc(C.SITE_SIEGE) + '</small></span>';
+      $('#lgOtpH').innerHTML = 'Un code à 4 chiffres vient d\'être envoyé à <b>' + esc(r.email) + '</b>. Saisissez-le ci-dessous (pensez à vérifier les courriers indésirables).';
       $$('#otpBox input').forEach(function (c) { c.value = ''; c.disabled = false; });
       $('#otpBox').classList.remove('err');
       $('#otpGo').disabled = false;
       demarrerMinuteur(r.expire || (Date.now() + C.OTP_MINUTES * 60000));
       setTimeout(function () { $('#otpBox input').focus(); }, 50);
     } catch (e) {
-      if (L.etape !== 4) etapeConnexion(L.etape);
+      if (L.etape !== 4) await etapeConnexion(L.etape);
       $('#lgErr').textContent = e.message;
     } finally {
       chargement(false);
@@ -346,7 +368,7 @@
       if (reste <= 0) {
         arreterMinuteur();
         t.className = 'otp-t exp';
-        t.textContent = 'Code expiré. Générez un nouveau code pour continuer.';
+        t.textContent = 'Code expiré. Demandez un nouveau code pour continuer.';
         $$('#otpBox input').forEach(function (c) { c.value = ''; c.disabled = true; });
         $('#otpGo').disabled = true;
         return;
@@ -364,7 +386,7 @@
     if (verifEnCours) return;
     const code = $$('#otpBox input').map(function (c) { return c.value; }).join('');
     if (code.length !== 4) { $('#lgErr').textContent = 'Saisissez les 4 chiffres du code.'; return; }
-    if (Date.now() > L.expire) { $('#lgErr').textContent = 'Code expiré. Générez un nouveau code.'; return; }
+    if (Date.now() > L.expire) { $('#lgErr').textContent = 'Code expiré. Demandez un nouveau code.'; return; }
     verifEnCours = true;
     chargement(true);
     $('#lgErr').textContent = '';
@@ -399,7 +421,7 @@
     S.filtres = Object.assign({}, FILTRES_DEFAUT, { vue: estBO() ? 'a_valider' : 'tout' });
     S.panier = (memoire.lire(clePanier()) || []).filter(function (l) { return l && l.uid; });
     S.vue = null;
-    NV.envoye = null; NV.cat = CATS[0].code; NV.q = ''; NV.sig = null;
+    NV.cat = CATS[0].code; NV.q = '';
     MES.statut = ''; MES.q = '';
     VAL.onglet = 'attente'; VAL.site = ''; VAL.cat = ''; VAL.q = '';
     $('#login').hidden = true;
@@ -411,7 +433,7 @@
       S.minuteur = setInterval(function () {
         const actif = document.activeElement;
         const enSaisie = actif && /INPUT|TEXTAREA|SELECT/.test(actif.tagName) && actif.closest('.main');
-        if (!document.hidden && !S.ouvert && !enSaisie) actualiser(true);
+        if (!document.hidden && !S.ouvert && !enSaisie && $('#as').hidden) actualiser(true);
       }, C.ACTUALISATION_SECONDES * 1000);
     }
   }
@@ -421,6 +443,7 @@
     if (S.session && !message) Store.deconnexion(S.session).catch(function () { /* déjà expirée */ });
     memoire.effacer(CLE_SESSION);
     fermerPanneau();
+    fermerFiche();
     S.session = null;
     S.besoins = [];
     S.selection = {};
@@ -438,16 +461,16 @@
   function initApp() {
     const bo = estBO();
     const ss = S.session;
-    const caisse = !(posteDef(ss.poste) || {}).siege;
+    const caisse = estCaisse();
     $('#sbAv').textContent = initiales(ss.nom);
     $('#sbAv').className = 'sb-av' + (bo ? ' bo' : '');
     $('#sbName').textContent = ss.nom;
     $('#sbRole').textContent = ss.poste + ' · ' + ss.site;
     $('#sbMes').textContent = caisse ? 'Besoins du site' : 'Mes besoins';
+    $('#bnMes').textContent = caisse ? 'Mon site' : 'Mes besoins';
+    $('#nvHello').textContent = 'Bonjour ' + ss.nom;
     $('#mesExport').hidden = !Store.estExporteur(ss);
-    $('#regTitle').textContent = bo
-      ? (estManager() ? 'Besoins — validation des responsables et des managers' : 'Besoins — validation ' + ss.nom)
-      : caisse ? 'Besoins des caissières — ' + ss.site : 'Mes besoins';
+    $('#regTitle').textContent = estManager() ? 'Registre — besoins des responsables et des managers' : 'Registre — besoins validés par ' + ss.nom;
     $('#fVue').value = S.filtres.vue;
     $('#ftText').textContent = 'Quipux Financial Services — ' + C.APP_TITRE + ' · ' + new Date().getFullYear();
     rendreDateLimite();
@@ -464,23 +487,44 @@
     ['#nvSearch', '#mesSearch', '#valSearch'].forEach(function (k) { $(k).value = ''; });
     $('#valSite').value = ''; $('#valCat').value = '';
     rendreNouveau();
-    allerVue(bo ? 'valider' : 'nouveau');
+    // Lien direct (#tdb, #sec-art…) sinon écran d'accueil du poste.
+    const cible = cibleHash();
+    S.vueDemandee = !!cible;
+    S.secCible = cible && cible.sec;
+    allerVue(cible ? cible.vue : bo ? 'valider' : 'nouveau', { hist: cible ? false : 'replace' });
 
     if (appInitialisee) return;
     appInitialisee = true;
     initNouveau();
+    initFiche();
     initMes();
     initValider();
-    $('#sbNav').addEventListener('click', function (e) {
+    const nav = function (e) {
       const b = e.target.closest('[data-view]');
       if (b) allerVue(b.dataset.view);
-    });
+    };
+    $('#sbNav').addEventListener('click', nav);
+    $('#bn').addEventListener('click', nav);
     document.addEventListener('click', function (e) {
       const g = e.target.closest('[data-goto]');
       if (g) allerVue(g.dataset.goto);
       const x = e.target.closest('[data-export]');
       if (x) exporterExcel();
     });
+    window.addEventListener('popstate', surHash);
+    window.addEventListener('hashchange', surHash);
+    $('#tdbNav').addEventListener('click', function (e) {
+      const a = e.target.closest('a[data-sec]');
+      if (!a) return;
+      e.preventDefault();
+      try { history.replaceState(null, '', '#' + a.dataset.sec); } catch (x) { /* fichier local */ }
+      allerSection(a.dataset.sec);
+    });
+    let rafNav = 0;
+    window.addEventListener('scroll', function () {
+      if (rafNav) return;
+      rafNav = requestAnimationFrame(function () { rafNav = 0; majTdbNav(); });
+    }, { passive: true });
 
     const surFiltre = function () { S.limite = PAR_PAGE; rendre(); };
     $('#fVue').addEventListener('change', function (e) { S.filtres.vue = e.target.value; S.selection = {}; surFiltre(); });
@@ -506,6 +550,7 @@
       if (!b) return;
       S.artCat = b.dataset.c;
       rendreArticles(filtrer());
+      icones();
     });
     $('#btnMore').addEventListener('click', function () { S.limite += PAR_PAGE; rendreTable(filtrer()); });
     $('#tbody').addEventListener('click', function (e) {
@@ -547,9 +592,10 @@
       $('#srch').value = tr.dataset.lib;
       S.limite = PAR_PAGE;
       rendreTable(filtrer());
-      document.getElementById('sec-reg').scrollIntoView({ behavior: 'smooth' });
+      allerSection('sec-reg');
     });
     $('#sbToggle').addEventListener('click', function () { menu(!document.body.classList.contains('sb-open')); });
+    $('#sbClose').addEventListener('click', function () { menu(false); });
     $('#sbOv').addEventListener('click', function () { menu(false); });
     $('#btnRefresh').addEventListener('click', function () { actualiser(); });
     $('#btnLogout').addEventListener('click', function () { deconnecter(); });
@@ -565,14 +611,14 @@
 
   function rendreDateLimite() {
     const b = $('#dlBanner');
-    const d = C.DATE_LIMITE ? new Date(C.DATE_LIMITE + 'T23:59:59') : null;
-    if (!d || isNaN(d)) { b.hidden = true; return; }
-    const j = Math.ceil((d - Date.now()) / 864e5);
+    const dl = dateLimite();
+    $('#sbCamp').textContent = dl ? (dl.j < 0 ? 'Saisie close' : 'Saisie jusqu\'au ' + fDate(dl.d)) : 'Expression des besoins';
+    if (!dl) { b.hidden = true; return; }
     b.hidden = false;
-    b.className = 'dl-banner' + (j < 0 ? ' late' : '');
-    b.innerHTML = ico(j < 0 ? 'alarm-clock-off' : 'calendar-clock') + '<span>' + (j < 0
-      ? 'La date limite de saisie (' + fDate(d) + ') est dépassée. Contactez votre responsable pour tout besoin urgent.'
-      : 'Date limite de saisie des besoins ' + esc(C.CAMPAGNE) + ' : <b>' + fDate(d) + '</b> — ' + (j === 0 ? "c'est aujourd'hui" : 'encore ' + j + ' jour(s)') + '.') + '</span>';
+    b.className = 'dl-banner' + (dl.j < 0 ? ' late' : '');
+    b.innerHTML = ico(dl.j < 0 ? 'alarm-clock-off' : 'calendar-clock') + '<span>' + (dl.j < 0
+      ? 'La date limite de saisie (' + fDate(dl.d) + ') est dépassée. Contactez votre responsable pour tout besoin urgent.'
+      : 'Date limite de saisie des besoins ' + esc(C.CAMPAGNE) + ' : <b>' + fDate(dl.d) + '</b> — ' + (dl.j === 0 ? "c'est aujourd'hui" : 'encore ' + dl.j + ' jour(s)') + '.') + '</span>';
   }
 
   function synchroniserFiltres() {
@@ -587,13 +633,15 @@
 
   async function actualiser(silencieux) {
     if (!silencieux) chargement(true);
+    $('#btnRefresh').classList.add('spin');
     try {
       const r = await Store.list(S.session);
       S.besoins = r.besoins || [];
       S.synchro = new Date();
       if (!S.premierChargement) {
         S.premierChargement = true;
-        if (!estBO() && !S.panier.length && S.besoins.some(estMien)) S.vue = 'mes';
+        // Retour d'un agent qui a déjà envoyé des besoins (et rien en cours) : il arrive sur leur suivi.
+        if (!estBO() && !S.vueDemandee && !S.panier.length && S.besoins.some(estMien)) S.vue = 'mes';
       }
       Object.keys(S.selection).forEach(function (id) {
         const b = parId(id);
@@ -602,6 +650,11 @@
       rendre();
       if (S.vue) allerVueSilencieux(S.vue);
       if (S.ouvert && S.ouvert !== '__groupe__') rendrePanneau();
+      if (S.secCible) {
+        const sec = S.secCible;
+        S.secCible = null;
+        setTimeout(function () { allerSection(sec); }, 120);
+      }
     } catch (err) {
       if (err.code === 'SESSION_EXPIREE') {
         deconnecter('Session expirée : ' + err.message);
@@ -610,6 +663,7 @@
       }
     } finally {
       if (!silencieux) chargement(false);
+      $('#btnRefresh').classList.remove('spin');
     }
   }
 
@@ -671,8 +725,8 @@
     const liste = filtrer();
     const st = stats(liste);
     $('#pgMeta').textContent = C.CAMPAGNE + (S.filtres.site ? ' · Site : ' + S.filtres.site : '') + ' · Mis à jour à ' + fHeure(S.synchro);
-    $('#shPeriode').textContent = 'Campagne ' + C.CAMPAGNE;
-    $('#tbSync').textContent = 'Données du ' + fDateHeure(S.synchro);
+    $('#tbSync').textContent = 'À jour · ' + fHeure(S.synchro);
+    $('#tbSync').title = 'Données synchronisées le ' + fDateHeure(S.synchro);
     rendreProgression(st);
     rendreKpis(st);
     rendreGraphiques(liste);
@@ -689,7 +743,7 @@
     $('#gPct').textContent = st.taux + '%';
     $('#swrap').innerHTML = segs.map(function (k) {
       const w = st.n ? (st[k] / st.n) * 100 : 0;
-      return '<div class="seg" style="width:' + w + '%;background:' + STATUTS[k].couleur + '" title="' + STATUTS[k].pluriel + ' : ' + st[k] + '"></div>';
+      return w ? '<div class="sw-seg" style="width:' + w + '%;background:' + STATUTS[k].couleur + '" title="' + STATUTS[k].pluriel + ' : ' + st[k] + '"></div>' : '';
     }).join('');
     $('#sLegend').innerHTML = segs.map(function (k) {
       return '<span class="sli"><span class="sd" style="background:' + STATUTS[k].couleur + '"></span>' + STATUTS[k].pluriel + ' : <b>' + st[k] + '</b></span>';
@@ -707,10 +761,10 @@
     const parCat = CATS.map(function (c) { return c.libelle + ' ' + nombre(somme(filtrer().filter(function (b) { return b.categorie === c.code; }), function (b) { return b.quantite; })); }).join(' · ');
     const aValider = S.besoins.filter(function (b) { return b.statut === 'EN_ATTENTE' && peutDecider(b); });
     $('#kpis').innerHTML = [
-      k('package', 'Quantité demandée', nombre(st.qte), parCat, '#111827'),
+      k('package', 'Quantité demandée', nombre(st.qte), parCat, '#1d4ed8'),
       estBO()
         ? k('stamp', 'À valider par vous', nombre(aValider.length), aValider.length ? nombre(somme(aValider, function (b) { return b.quantite; })) + ' unité(s) en attente de votre décision' : 'rien en attente', '#9333ea')
-        : k('shopping-cart', 'Panier non envoyé', nombre(S.panier.length), S.panier.length ? 'ligne(s) à envoyer pour validation' : 'rien en attente d\'envoi', '#9333ea'),
+        : k('shopping-cart', 'Demande non envoyée', nombre(S.panier.length), S.panier.length ? 'article(s) à envoyer pour validation' : 'rien en attente d\'envoi', '#9333ea'),
       k('hourglass', 'En attente de validation', nombre(st.EN_ATTENTE), nombre(st.qteAttente) + ' unité(s) concernée(s)', '#ea580c'),
       k('circle-check', 'Lignes validées', nombre(st.VALIDE), nombre(st.qteValidee) + ' unité(s) validée(s)', '#047857'),
       k('circle-x', 'Lignes rejetées', nombre(st.REJETE), st.traites ? st.tauxValid + '% de validation des lignes examinées' : 'aucune décision pour le moment', '#be123c'),
@@ -733,9 +787,10 @@
     if (!window.Chart) return;
     Chart.defaults.font.family = "'Public Sans', ui-sans-serif, system-ui, sans-serif";
     Chart.defaults.font.size = 12;
-    Chart.defaults.color = '#6b7280';
-    Chart.defaults.borderColor = '#f3f4f6';
+    Chart.defaults.color = '#64748b';
+    Chart.defaults.borderColor = '#eef2f6';
     const legende = { position: 'bottom', labels: { boxWidth: 10, boxHeight: 10, useBorderRadius: true, borderRadius: 3, padding: 14 } };
+    const infobulle = { backgroundColor: '#0f172a', padding: 10, cornerRadius: 8, titleFont: { weight: '600' }, boxPadding: 4 };
     const actifs = liste.filter(function (b) { return b.statut !== 'REJETE'; });
 
     graphique('cCat', {
@@ -746,21 +801,22 @@
           return {
             label: STATUTS[s].pluriel,
             backgroundColor: STATUTS[s].couleur,
-            borderRadius: 4,
+            borderRadius: 6,
+            maxBarThickness: 56,
             data: CATS.map(function (c) { return somme(liste.filter(function (b) { return b.categorie === c.code && b.statut === s; }), function (b) { return b.quantite; }); }),
           };
         }),
       },
-      options: { maintainAspectRatio: false, plugins: { legend: legende }, scales: { x: { stacked: true, grid: { display: false } }, y: { stacked: true, beginAtZero: true, ticks: { precision: 0 } } } },
+      options: { maintainAspectRatio: false, plugins: { legend: legende, tooltip: infobulle }, scales: { x: { stacked: true, grid: { display: false } }, y: { stacked: true, beginAtZero: true, ticks: { precision: 0 } } } },
     });
 
     graphique('cStatut', {
       type: 'doughnut',
       data: {
         labels: ORDRE_STATUTS.map(function (s) { return STATUTS[s].pluriel; }),
-        datasets: [{ data: ORDRE_STATUTS.map(function (s) { return liste.filter(function (b) { return b.statut === s; }).length; }), backgroundColor: ORDRE_STATUTS.map(function (s) { return STATUTS[s].couleur; }), borderWidth: 2, borderColor: '#fff' }],
+        datasets: [{ data: ORDRE_STATUTS.map(function (s) { return liste.filter(function (b) { return b.statut === s; }).length; }), backgroundColor: ORDRE_STATUTS.map(function (s) { return STATUTS[s].couleur; }), borderWidth: 3, borderColor: '#fff', hoverOffset: 6 }],
       },
-      options: { maintainAspectRatio: false, cutout: '64%', plugins: { legend: legende } },
+      options: { maintainAspectRatio: false, cutout: '68%', plugins: { legend: legende, tooltip: infobulle } },
     });
 
     const m = {};
@@ -773,9 +829,9 @@
       type: 'bar',
       data: {
         labels: top.map(function (x) { return x.k.split('|')[1]; }),
-        datasets: [{ label: 'Quantité', data: top.map(function (x) { return x.q; }), backgroundColor: top.map(function (x) { return cat(x.k.split('|')[0]).couleur; }), borderRadius: 4, barThickness: 16 }],
+        datasets: [{ label: 'Quantité', data: top.map(function (x) { return x.q; }), backgroundColor: top.map(function (x) { return cat(x.k.split('|')[0]).couleur; }), borderRadius: 6, barThickness: 16 }],
       },
-      options: { indexAxis: 'y', maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, ticks: { precision: 0 } }, y: { grid: { display: false } } } },
+      options: { indexAxis: 'y', maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: infobulle }, scales: { x: { beginAtZero: true, ticks: { precision: 0 } }, y: { grid: { display: false } } } },
     });
 
     const coulTypes = ['#1d4ed8', '#ea580c', '#0891b2', '#9333ea', '#047857'];
@@ -783,9 +839,9 @@
       type: 'doughnut',
       data: {
         labels: C.TYPES_BESOIN,
-        datasets: [{ data: C.TYPES_BESOIN.map(function (t) { return somme(actifs.filter(function (b) { return b.type_besoin === t; }), qteRetenue); }), backgroundColor: coulTypes, borderWidth: 2, borderColor: '#fff' }],
+        datasets: [{ data: C.TYPES_BESOIN.map(function (t) { return somme(actifs.filter(function (b) { return b.type_besoin === t; }), qteRetenue); }), backgroundColor: coulTypes, borderWidth: 3, borderColor: '#fff', hoverOffset: 6 }],
       },
-      options: { maintainAspectRatio: false, cutout: '64%', plugins: { legend: legende } },
+      options: { maintainAspectRatio: false, cutout: '68%', plugins: { legend: legende, tooltip: infobulle } },
     });
 
     if (estBO()) {
@@ -801,12 +857,12 @@
           labels: sites,
           datasets: CATS.map(function (c) {
             return {
-              label: c.libelle, backgroundColor: c.couleur, borderRadius: 3, barThickness: 14,
+              label: c.libelle, backgroundColor: c.couleur, borderRadius: 4, barThickness: 14,
               data: sites.map(function (p) { return somme(ls.filter(function (b) { return b.site === p && b.categorie === c.code; }), qteRetenue); }),
             };
           }),
         },
-        options: { indexAxis: 'y', maintainAspectRatio: false, plugins: { legend: legende }, scales: { x: { stacked: true, beginAtZero: true, ticks: { precision: 0 } }, y: { stacked: true, grid: { display: false } } } },
+        options: { indexAxis: 'y', maintainAspectRatio: false, plugins: { legend: legende, tooltip: infobulle }, scales: { x: { stacked: true, beginAtZero: true, ticks: { precision: 0 } }, y: { stacked: true, grid: { display: false } } } },
       });
     }
   }
@@ -903,12 +959,8 @@
 
   function rendreArticles(liste) {
     const actifs = liste.filter(function (b) { return b.statut !== 'REJETE'; });
-    $('#artChips').innerHTML = [['', 'Toutes']].concat(CATS.map(function (c) { return [c.code, c.libelle]; })).map(function (c) {
-      const n = c[0] ? actifs.filter(function (b) { return b.categorie === c[0]; }).length : actifs.length;
-      return '<button type="button" class="fb' + (S.artCat === c[0] ? ' on' : '') + '" data-c="' + c[0] + '">' + c[1] + ' <i>' + n + '</i></button>';
-    }).join('');
     const m = {};
-    actifs.filter(function (b) { return !S.artCat || b.categorie === S.artCat; }).forEach(function (b) {
+    actifs.forEach(function (b) {
       const k = b.categorie + '|' + b.libelle;
       if (!m[k]) m[k] = { categorie: b.categorie, libelle: b.libelle, sites: {}, n: 0, qte: 0, val: 0, att: 0 };
       const x = m[k];
@@ -918,18 +970,36 @@
       if (b.statut === 'VALIDE') x.val += Number(b.quantite_validee) || 0;
       if (b.statut === 'EN_ATTENTE') x.att += Number(b.quantite) || 0;
     });
+    const tous = Object.keys(m).map(function (k) { return m[k]; });
+    $('#artChips').innerHTML = [['', 'Toutes']].concat(CATS.map(function (c) { return [c.code, c.libelle]; })).map(function (c) {
+      const n = c[0] ? tous.filter(function (x) { return x.categorie === c[0]; }).length : tous.length;
+      return '<button type="button" class="fb' + (S.artCat === c[0] ? ' on' : '') + '" data-c="' + c[0] + '">' + c[1] + ' <i>' + n + '</i></button>';
+    }).join('');
     const ordreCat = CATS.map(function (c) { return c.code; });
-    const lignes = Object.keys(m).map(function (k) { return m[k]; })
+    const lignes = tous.filter(function (x) { return !S.artCat || x.categorie === S.artCat; })
       .sort(function (a, b) { return ordreCat.indexOf(a.categorie) - ordreCat.indexOf(b.categorie) || b.qte - a.qte; });
     const z = function (n) { return n ? nombre(n) : '<span class="z">0</span>'; };
+    const repartition = function (x) {
+      const pv = x.qte ? x.val / x.qte * 100 : 0;
+      const pa = x.qte ? x.att / x.qte * 100 : 0;
+      return '<div class="rep" title="Validé : ' + nombre(x.val) + ' · En attente : ' + nombre(x.att) + ' · Non retenu : ' + nombre(Math.max(0, x.qte - x.val - x.att)) + '">' +
+        '<div class="rep-b"><span style="width:' + pv + '%;background:#047857"></span><span style="width:' + pa + '%;background:#ea580c"></span></div>' +
+        '<span class="rep-p">' + Math.round(pv) + '%</span></div>';
+    };
     $('#tArt tbody').innerHTML = lignes.length ? lignes.map(function (x) {
-      return '<tr data-lib="' + esc(x.libelle) + '" title="Voir les lignes de cet article">' +
-        '<td>' + badgeCat(x.categorie) + '</td><td><b>' + esc(x.libelle) + '</b></td>' +
-        '<td class="num bo-only">' + Object.keys(x.sites).length + '</td>' +
+      const c = cat(x.categorie);
+      return '<tr data-lib="' + esc(x.libelle) + '" title="Voir les lignes de cet article dans le registre">' +
+        '<td><span class="art-n" style="--c:' + c.couleur + '"><span class="dl-ic">' + ico(icoArticle(x.libelle, x.categorie)) + '</span><b>' + esc(x.libelle) + '</b></span></td>' +
+        '<td>' + badgeCat(x.categorie) + '</td>' +
+        '<td class="num">' + Object.keys(x.sites).length + '</td>' +
         '<td class="num">' + x.n + '</td><td class="num"><b>' + nombre(x.qte) + '</b></td>' +
-        '<td class="num">' + z(x.val) + '</td><td class="num">' + z(x.att) + '</td></tr>';
-    }).join('') : '<tr><td colspan="7"><div class="nd">' + ico('package-open') + 'Aucun article sur la période.</div></td></tr>';
-    $('#artRc').textContent = lignes.length + ' article(s) — ' + nombre(somme(lignes, function (x) { return x.qte; })) + ' unité(s) demandée(s)';
+        '<td class="num">' + z(x.val) + '</td><td class="num">' + z(x.att) + '</td><td>' + repartition(x) + '</td></tr>';
+    }).join('') : '<tr><td colspan="8"><div class="nd">' + ico('package-open') + 'Aucun article pour ces filtres.</div></td></tr>';
+    const tot = { qte: somme(lignes, function (x) { return x.qte; }), val: somme(lignes, function (x) { return x.val; }), att: somme(lignes, function (x) { return x.att; }), n: somme(lignes, function (x) { return x.n; }) };
+    const sites = {};
+    lignes.forEach(function (x) { Object.keys(x.sites).forEach(function (s) { sites[s] = 1; }); });
+    $('#tArt tfoot').innerHTML = lignes.length ? '<tr><td>Total · ' + lignes.length + ' article(s)</td><td></td><td class="num">' + Object.keys(sites).length + '</td><td class="num">' + tot.n + '</td>' +
+      '<td class="num">' + nombre(tot.qte) + '</td><td class="num">' + nombre(tot.val) + '</td><td class="num">' + nombre(tot.att) + '</td><td>' + repartition(tot) + '</td></tr>' : '';
   }
 
   /* ================= Panneau détail & décisions ================= */
@@ -968,8 +1038,8 @@
         it('Caractéristiques', esc(b.caracteristiques), true) +
       '</div></div>' +
       '<div class="ps"><h3 class="pst">Bénéficiaire et justification</h3><div class="pg">' +
-        it('Site', esc(b.site)) + it('Demandeur', esc(b.demandeur) + (b.poste ? '<div class="sub" style="font-weight:500;color:#6b7280">' + esc(b.poste) + '</div>' : '')) +
-        it('Validation par', esc(valideurTxt(b))) + it('Poste', esc(b.poste)) +
+        it('Site', esc(b.site)) + it('Demandeur', esc(b.demandeur)) +
+        it('Poste', esc(b.poste)) + it('Validation par', esc(valideurTxt(b))) +
         (equipTxt(b) ? it('Année d\'acquisition de l\'équipement actuel', esc(b.annee_acquisition)) + it('État de l\'équipement actuel', esc(b.etat_actuel)) : '') +
       '</div><p class="pil" style="margin:12px 0 6px">Motif</p><div class="ptx">' + esc(b.motif) + '</div>' +
       '</div>' +
@@ -984,7 +1054,7 @@
       $('#pForm').innerHTML = formDecision(b.statut === 'EN_ATTENTE' ? 'VALIDE' : b.statut, b.quantite_validee !== '' ? b.quantite_validee : b.quantite, b.commentaire_bo, true);
       brancherDecision([b.id]);
     } else if (b.statut === 'EN_ATTENTE' && estMien(b)) {
-      $('#pForm').innerHTML = '<div class="ps"><h3 class="pst">Modifier</h3><p class="cs" style="margin-bottom:6px">Validation par ' + esc(valideurTxt(b)) + '.</p><p class="cs" style="margin-bottom:10px">Ce besoin n\'a pas encore été examiné : vous pouvez le retirer puis le ressaisir si nécessaire.</p>' +
+      $('#pForm').innerHTML = '<div class="ps"><h3 class="pst">Modifier</h3><p class="cs" style="margin-bottom:6px">Validation par ' + esc(valideurTxt(b)) + '.</p><p class="cs" style="margin-bottom:12px">Ce besoin n\'a pas encore été examiné : vous pouvez le retirer puis le ressaisir si nécessaire.</p>' +
         '<button type="button" class="btn btn-danger" id="pRetirer">' + ico('trash-2') + 'Retirer ce besoin</button></div>';
       $('#pRetirer').addEventListener('click', function () { retirer(b); });
     } else if (b.statut === 'EN_ATTENTE') {
@@ -1004,7 +1074,7 @@
       '</div>' +
       (unitaire ? '<div id="decQteW"><label class="fl" for="decQte">Quantité validée</label><input class="in" id="decQte" type="number" min="0" step="1" value="' + esc(qte) + '" style="max-width:160px"></div>'
         : '<p class="cs" style="margin-top:10px">En validation groupée, la quantité validée est égale à la quantité demandée de chaque ligne.</p>') +
-      '<label class="fl" for="decCom">Commentaire <span id="decComReq" class="z"></span></label><textarea class="in" id="decCom" rows="3" placeholder="Ex. : validé pour le budget 2027, à livrer au T1…">' + esc(commentaire || '') + '</textarea>' +
+      '<label class="fl" for="decCom">Commentaire <small id="decComReq"></small></label><textarea class="in" id="decCom" rows="3" placeholder="Ex. : validé pour le budget 2027, à livrer au T1…">' + esc(commentaire || '') + '</textarea>' +
       '<p class="cs" style="margin-top:10px">Décision enregistrée au nom de <b>' + esc(S.session.nom) + '</b> (' + esc(S.session.poste) + ').</p>' +
       '<div class="lg-err" id="decErr"></div>' +
       '<div class="pf-ft"><button type="submit" class="btn bp">' + ico('save') + 'Enregistrer la décision</button></div></form>';
@@ -1088,7 +1158,7 @@
     }
   }
 
-  /* ================= Navigation entre les vues ================= */
+  /* ================= Navigation entre les vues (avec liens directs #vue) ================= */
 
   const VUES = {
     nouveau: 'Exprimer un besoin',
@@ -1096,30 +1166,72 @@
     valider: 'À valider',
     tdb: 'Tableau de bord',
   };
+  const SECTIONS_TDB = ['sec-kpi', 'sec-graph', 'sec-reg', 'sec-synth', 'sec-art'];
 
-  function allerVueSilencieux(v) {
-    if ($('.view[data-view="' + v + '"]').hidden) allerVue(v);
+  // #nouveau, #mes, #valider, #tdb ou une section du tableau de bord (#sec-art…).
+  function cibleHash() {
+    let h = '';
+    try { h = decodeURIComponent(location.hash.slice(1)); } catch (e) { h = ''; }
+    if (VUES[h]) return { vue: h };
+    if (SECTIONS_TDB.indexOf(h) >= 0) return { vue: 'tdb', sec: h };
+    return null;
   }
 
-  function allerVue(v) {
+  function surHash() {
+    if (!S.session) return;
+    const c = cibleHash();
+    if (!c) return;
+    if (c.vue !== S.vue) allerVue(c.vue, { hist: false });
+    if (c.sec) allerSection(c.sec);
+  }
+
+  function allerSection(id) {
+    const el = document.getElementById(id);
+    if (!el || $('.view[data-view="tdb"]').hidden) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function majTdbNav() {
+    if (S.vue !== 'tdb') return;
+    const lim = $('#tdbNav').getBoundingClientRect().bottom + 24;
+    const visibles = SECTIONS_TDB.filter(function (id) { const el = document.getElementById(id); return el && el.offsetParent !== null; });
+    let cur = visibles[0];
+    visibles.forEach(function (id) { if (document.getElementById(id).getBoundingClientRect().top <= lim) cur = id; });
+    if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4) cur = visibles[visibles.length - 1];
+    $$('#tdbNav a').forEach(function (a) { a.classList.toggle('on', a.dataset.sec === cur); });
+  }
+
+  function allerVueSilencieux(v) {
+    if ($('.view[data-view="' + v + '"]').hidden) allerVue(v, { hist: 'replace' });
+  }
+
+  // o.hist : 'push' (par défaut, bouton Précédent du navigateur), 'replace', ou false (l'adresse est déjà la bonne).
+  function allerVue(v, o) {
+    const opt = o || {};
     if (!estBO() && (v === 'valider' || v === 'tdb')) v = 'nouveau';
     S.vue = v;
     $$('.view').forEach(function (s) { s.hidden = s.dataset.view !== v; });
-    $$('#sbNav [data-view]').forEach(function (b) { b.classList.toggle('on', b.dataset.view === v); });
+    $$('#sbNav [data-view], #bn [data-view]').forEach(function (b) { b.classList.toggle('on', b.dataset.view === v); });
     $('#bcVue').textContent = v === 'mes' ? $('#sbMes').textContent : VUES[v];
+    const hist = opt.hist === undefined ? 'push' : opt.hist;
+    const c = cibleHash();
+    try {
+      if (hist && location.hash !== '#' + v) history[hist === 'push' ? 'pushState' : 'replaceState'](null, '', '#' + v);
+      else if (!hist && !(c && c.vue === v)) history.replaceState(null, '', '#' + v);
+    } catch (e) { /* fichier local */ }
     menu(false);
     window.scrollTo(0, 0);
     if (v === 'nouveau') majBarreMobile();
-    if (v === 'tdb') Object.keys(S.charts).forEach(function (k) { S.charts[k].resize(); });
+    if (v === 'tdb') { Object.keys(S.charts).forEach(function (k) { S.charts[k].resize(); }); majTdbNav(); }
     icones();
   }
 
   const ICONES_ARTICLES = [
-    [/portable/i, 'laptop'], [/unit[ée] centrale|bureau$/i, 'cpu'], [/[ée]cran/i, 'monitor'], [/clavier/i, 'keyboard'],
+    [/[ée]cran/i, 'monitor'], [/^bureau/i, 'lamp-desk'], [/portable/i, 'laptop'], [/unit[ée] centrale|bureau$/i, 'cpu'], [/clavier/i, 'keyboard'],
     [/souris/i, 'mouse'], [/batterie/i, 'battery-charging'], [/chargeur/i, 'plug-zap'], [/imprimante/i, 'printer'],
     [/scanner/i, 'scan-line'], [/serveur/i, 'server'], [/disque|stockage/i, 'hard-drive'], [/onduleur/i, 'zap'],
     [/multiprise/i, 'plug'], [/wifi/i, 'wifi'], [/support/i, 'laptop'],
-    [/^bureau/i, 'lamp-desk'], [/caisson/i, 'archive'], [/caissette/i, 'box'], [/si[èe]ge|chaise|fauteuil/i, 'armchair'],
+    [/caisson/i, 'archive'], [/caissette/i, 'box'], [/si[èe]ge|chaise|fauteuil/i, 'armchair'],
     [/chasuble|polo|tee/i, 'shirt'], [/coffre/i, 'vault'], [/billet/i, 'banknote'], [/tablette/i, 'tablet'],
     [/t[ée]l[ée]phone|fourreau|protection/i, 'smartphone'],
   ];
@@ -1127,11 +1239,17 @@
     const t = ICONES_ARTICLES.find(function (x) { return x[0].test(lib); });
     return t ? t[1] : cat(catCode).ico || 'package';
   };
-  const teinte = function (c) { return 'color-mix(in srgb,' + c + ' 11%,#fff)'; };
 
-  /* ================= Vue « Exprimer un besoin » : catalogue + demande ================= */
+  /* ================= Vue « Exprimer un besoin » : catalogue, fiche article, demande ================= */
+  // Un clic sur un article ouvre sa fiche (quantité, type, équipement actuel, motif) : l'article
+  // n'entre dans « Ma demande » qu'une fois complet. Un article déjà ajouté se rouvre pour être modifié.
 
-  const NV = { cat: CATS[0].code, q: '', envoye: null };
+  const NV = { cat: CATS[0].code, q: '' };
+  const AIDE_TYPES = {
+    'Nouvelle Acquisition': ['sparkles', 'Équipement supplémentaire ou pour un nouveau poste'],
+    'Remplacement Équipement Défectueux': ['wrench', 'L\'équipement actuel est en panne ou défectueux'],
+    'Renouvellement': ['refresh-cw', 'L\'équipement actuel est ancien ou usé'],
+  };
   const avecEquipement = function (l) { return C.TYPES_EQUIPEMENT_ACTUEL.indexOf(l.type_besoin) >= 0; };
   const manques = function (l) {
     const m = [];
@@ -1146,6 +1264,7 @@
     if (!String(l.motif || '').trim()) m.push('le motif');
     return m;
   };
+  const nouvelUid = function () { return Date.now().toString(36) + Math.random().toString(36).slice(2, 6); };
 
   function initNouveau() {
     $('#nvCats').addEventListener('click', function (e) {
@@ -1160,23 +1279,9 @@
     $('#nvTiles').addEventListener('click', function (e) {
       const t = e.target.closest('[data-art]');
       if (!t) return;
-      const autre = t.dataset.art === AUTRE;
-      if (!autre) {
-        const ex = S.panier.find(function (l) { return l.categorie === t.dataset.cat && l.libelle === t.dataset.art; });
-        if (ex) { retirerLigne(ex); return; } // décocher
-      }
-      const bl = ligneBloquante();
-      if (bl) {
-        allerLigne(bl);
-        toast('Complétez d\'abord « ' + (bl.libelle || 'l\'article en cours') + ' » avant d\'en choisir un autre.', 'err');
-        return;
-      }
-      ajouterArticle(t.dataset.cat, autre ? '' : t.dataset.art, autre);
-    });
-    $('#nvLock').addEventListener('click', function (e) {
-      if (!e.target.closest('[data-act="aller"]')) return;
-      const bl = ligneBloquante();
-      if (bl) allerLigne(bl);
+      if (t.dataset.art === AUTRE) { ouvrirFiche(null, { categorie: t.dataset.cat, libelle: '', autre: true }); return; }
+      const ex = S.panier.find(function (l) { return l.categorie === t.dataset.cat && l.libelle === t.dataset.art; });
+      ouvrirFiche(ex || null, { categorie: t.dataset.cat, libelle: t.dataset.art });
     });
     $('#demVider').addEventListener('click', async function () {
       const n = S.panier.length;
@@ -1194,54 +1299,14 @@
     $('#demEnvoyer').addEventListener('click', envoyerDemande);
     $('#nvBar').addEventListener('click', function () { $('#nvDem').scrollIntoView({ behavior: 'smooth', block: 'start' }); });
     window.addEventListener('resize', majBarreMobile);
-
-    const box = $('#demLignes');
-    box.addEventListener('click', function (e) {
+    $('#demLignes').addEventListener('click', function (e) {
       const el = e.target.closest('[data-act]');
-      if (!el) return;
       const ligne = e.target.closest('[data-uid]');
       const l = ligne && S.panier.find(function (x) { return String(x.uid) === ligne.dataset.uid; });
-      const act = el.dataset.act;
-      if (act === 'nouvelle') { NV.envoye = null; rendreNouveau(); return; }
-      if (act === 'voir-mes') { NV.envoye = null; rendreNouveau(); allerVue('mes'); return; }
-      if (!l) return;
-      if (act === 'rm') { retirerLigne(l); return; }
-      if (act === 'moins' || act === 'plus') {
-        l.quantite = Math.max(1, (parseInt(l.quantite, 10) || 1) + (act === 'plus' ? 1 : -1));
-        ligne.querySelector('[data-f="quantite"]').value = l.quantite;
-        sauverPanier(); majEtatLigne(ligne, l); majPiedDemande(); rendreCatalogue();
-        return;
-      }
-      if (act === 'type') {
-        l.type_besoin = el.dataset.v;
-        if (!avecEquipement(l)) { l.annee_acquisition = ''; l.etat_actuel = ''; }
-        sauverPanier(); remplacerLigne(ligne, l);
-        return;
-      }
-      if (act === 'motif') {
-        const m = el.dataset.v;
-        l.motif = String(l.motif || '').trim() ? String(l.motif).trim() + ' — ' + m : m;
-        ligne.querySelector('[data-f="motif"]').value = l.motif;
-        sauverPanier(); majEtatLigne(ligne, l); majPiedDemande();
-        return;
-      }
-      if (act === 'toggle') { l.open = !l.open; sauverPanier(); remplacerLigne(ligne, l); return; }
-      if (act === 'car') { l.voirCar = true; remplacerLigne(ligne, l); const i = $('[data-uid="' + l.uid + '"] [data-f="caracteristiques"]'); if (i) i.focus(); }
+      if (!el || !l) return;
+      if (el.dataset.act === 'rm') retirerLigne(l);
+      else if (el.dataset.act === 'edit') ouvrirFiche(l);
     });
-    const saisie = function (e) {
-      const f = e.target.dataset.f;
-      if (!f) return;
-      const ligne = e.target.closest('[data-uid]');
-      const l = S.panier.find(function (x) { return String(x.uid) === ligne.dataset.uid; });
-      if (!l) return;
-      l[f] = f === 'quantite' ? Math.max(1, parseInt(e.target.value, 10) || 1) : e.target.value;
-      if (f === 'libelle') { const n = ligne.querySelector('.dl-n b'); if (n) n.textContent = l.libelle || 'Article à préciser'; }
-      e.target.classList.remove('err');
-      sauverPanier(); majEtatLigne(ligne, l); majPiedDemande();
-      if (f === 'quantite' || f === 'libelle') rendreCatalogue();
-    };
-    box.addEventListener('input', saisie);
-    box.addEventListener('change', saisie);
   }
 
   function rendreNouveau() {
@@ -1250,24 +1315,19 @@
     majBarreMobile();
   }
 
-  function rendreCatalogue(forcer) {
+  function rendreCatalogue() {
     const dans = {};
     S.panier.forEach(function (l) {
       const k = l.categorie + '|' + l.libelle;
       dans[k] = (dans[k] || 0) + (Number(l.quantite) || 0);
     });
-    // Ne redessine que si quelque chose a changé (évite de perdre un clic pendant la saisie).
-    const blq = ligneBloquante();
-    const sig = JSON.stringify([NV.cat, NV.q, dans, blq ? [blq.uid, manques(blq)] : null, S.panier.map(function (l) { return l.categorie; })]);
-    if (!forcer && sig === NV.sig) return;
-    NV.sig = sig;
     $('#nvCats').innerHTML = CATS.map(function (c) {
       const n = S.panier.filter(function (l) { return l.categorie === c.code; }).length;
-      return '<button type="button" role="tab" class="seg-b' + (!NV.q && NV.cat === c.code ? ' on' : '') + '" data-cat="' + c.code + '" style="--c:' + c.couleur + '">' +
+      return '<button type="button" role="tab" aria-selected="' + (!NV.q && NV.cat === c.code) + '" class="seg-b' + (!NV.q && NV.cat === c.code ? ' on' : '') + '" data-cat="' + c.code + '" style="--c:' + c.couleur + '">' +
         ico(c.ico) + esc(c.libelle) + (n ? '<i>' + n + '</i>' : '') + '</button>';
     }).join('');
     const q = sansAccents(NV.q).trim();
-    let tuiles = [];
+    const tuiles = [];
     CATS.forEach(function (c) {
       if (!q && c.code !== NV.cat) return;
       c.articles.forEach(function (a) {
@@ -1275,43 +1335,35 @@
         tuiles.push({ c: c, a: a });
       });
     });
-    const bl = ligneBloquante();
-    $('#nvLock').hidden = !bl;
-    if (bl) {
-      $('#nvLock').innerHTML = '<span class="lock-i">' + ico('lock') + '</span><span class="lock-t"><b>Complétez « ' + esc(bl.libelle || 'l\'article en cours') + ' » avant d\'en choisir un autre</b><small>Il manque : ' + esc(manques(bl).join(', ')) + '.</small></span>' +
-        '<button type="button" class="btn bp btn-sm" data-act="aller">' + ico('pencil') + 'Compléter</button>';
-    }
-    $('#nvTiles').classList.toggle('locked', !!bl);
+    $('#nvAide').textContent = q ? tuiles.length + ' article(s) pour « ' + NV.q.trim() + ' »' : cat(NV.cat).aide || '';
     const tuile = function (t) {
       const n = dans[t.c.code + '|' + t.a] || 0;
-      return '<button type="button" class="tile' + (n ? ' in' : bl ? ' off' : '') + '" data-cat="' + t.c.code + '" data-art="' + esc(t.a) + '" style="--c:' + t.c.couleur + '"' +
-        ' aria-pressed="' + (n ? 'true' : 'false') + '" title="' + (n ? 'Cliquer pour retirer cet article' : bl ? 'Complétez d\'abord l\'article en cours' : 'Ajouter à ma demande') + '">' +
+      return '<button type="button" class="tile' + (n ? ' in' : '') + '" data-cat="' + t.c.code + '" data-art="' + esc(t.a) + '" style="--c:' + t.c.couleur + '"' +
+        ' aria-pressed="' + (n ? 'true' : 'false') + '" title="' + (n ? 'Modifier ou retirer cet article' : 'Ajouter à ma demande') + '">' +
         '<span class="tile-ck">' + ico('check') + '</span>' +
         '<span class="tile-ic">' + ico(icoArticle(t.a, t.c.code)) + '</span>' +
         '<span class="tile-n">' + esc(t.a) + '</span>' +
         (q ? '<span class="tile-c">' + esc(t.c.libelle) + '</span>' : '') +
-        (n ? '<span class="tile-a"><span class="a-on">' + ico('check') + 'Ajouté · ' + nombre(n) + '</span><span class="a-off">' + ico('x') + 'Retirer</span></span>'
-          : '<span class="tile-a">' + ico(bl ? 'lock' : 'plus') + (bl ? 'Verrouillé' : 'Ajouter') + '</span>') + '</button>';
+        (n ? '<span class="tile-a"><span class="a-on">' + ico('check') + 'Ajouté · ' + nombre(n) + '</span><span class="a-off">' + ico('pencil') + 'Modifier</span></span>'
+          : '<span class="tile-a">' + ico('plus') + 'Ajouter</span>') + '</button>';
     };
     const autres = (q ? [] : [cat(NV.cat)]).map(function (c) {
-      return '<button type="button" class="tile tile-o' + (bl ? ' off' : '') + '" data-cat="' + c.code + '" data-art="' + AUTRE + '" style="--c:' + c.couleur + '">' +
+      return '<button type="button" class="tile tile-o" data-cat="' + c.code + '" data-art="' + AUTRE + '" style="--c:' + c.couleur + '">' +
         '<span class="tile-ic">' + ico('pencil-line') + '</span><span class="tile-n">Autre article</span>' +
         '<span class="tile-a">' + ico('plus') + 'Préciser</span></button>';
     });
     $('#nvTiles').innerHTML = tuiles.length || autres.length
       ? tuiles.map(tuile).join('') + autres.join('')
-      : '<div class="nd" style="grid-column:1/-1">' + ico('search-x') + 'Aucun article ne correspond à « ' + esc(NV.q) + ' ».</div>';
+      : '<div class="nd" style="grid-column:1/-1">' + ico('search-x') + 'Aucun article ne correspond à « ' + esc(NV.q) + ' ».<button type="button" class="btn bo btn-sm" id="nvAutre">' + ico('pencil-line') + 'Demander un autre article</button></div>';
+    const autre = $('#nvAutre');
+    if (autre) autre.addEventListener('click', function () { ouvrirFiche(null, { categorie: NV.cat, libelle: NV.q.trim(), autre: true }); });
     icones();
   }
 
-  const ligneBloquante = function () { return S.panier.find(function (l) { return manques(l).length; }); };
-
-  function allerLigne(l) {
-    l.open = true;
-    rendreDemande();
-    const el = $('[data-uid="' + l.uid + '"]');
+  function flashLigne(uid) {
+    const el = $('#demLignes [data-uid="' + uid + '"]');
     if (!el) return;
-    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    if (window.innerWidth > 1024) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash');
   }
 
@@ -1332,114 +1384,188 @@
         texte: '« <b>' + esc(l.libelle || 'Article à préciser') + '</b> » sera retiré de votre demande, avec les informations saisies.',
         ok: 'Retirer', okIco: 'trash-2', annuler: 'Garder',
       });
-      if (!ok) return;
+      if (!ok) return false;
     }
     S.panier = S.panier.filter(function (x) { return x !== l; });
     sauverPanier();
     rendreNouveau();
     toast('« ' + (l.libelle || 'Article') + ' » retiré de votre demande.');
+    return true;
   }
 
-  function ajouterArticle(catCode, libelle, autre) {
-    NV.envoye = null;
-    S.panier.forEach(function (l) { if (!manques(l).length) l.open = false; });
-    const l = {
-      uid: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), categorie: catCode, libelle: libelle, autre: !!autre,
-      quantite: 1, type_besoin: '', caracteristiques: '', motif: '', annee_acquisition: '', etat_actuel: '', open: true,
+  /* ---------- Fiche article ---------- */
+
+  const AS = { l: null, uid: null, essai: false };
+
+  function initFiche() {
+    $('#asForm').addEventListener('submit', function (e) { e.preventDefault(); validerFiche(); });
+    $('#asX').addEventListener('click', fermerFiche);
+    $('#asNo').addEventListener('click', fermerFiche);
+    $('#as').addEventListener('click', function (e) { if (e.target === $('#as')) fermerFiche(); });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && !$('#as').hidden && $('#cf').hidden) { e.stopImmediatePropagation(); fermerFiche(); }
+    }, true);
+    $('#asDel').addEventListener('click', async function () {
+      const l = S.panier.find(function (x) { return x.uid === AS.uid; });
+      if (l && await retirerLigne(l)) fermerFiche();
+    });
+    const box = $('#asB');
+    box.addEventListener('click', function (e) {
+      const el = e.target.closest('[data-act]');
+      if (!el || !AS.l) return;
+      const l = AS.l;
+      const act = el.dataset.act;
+      if (act === 'moins' || act === 'plus') {
+        l.quantite = Math.max(1, (parseInt(l.quantite, 10) || 1) + (act === 'plus' ? 1 : -1));
+        $('#asB [data-f="quantite"]').value = l.quantite;
+        majPiedFiche();
+      } else if (act === 'type') {
+        l.type_besoin = el.dataset.v;
+        rendreFiche();
+      } else if (act === 'etat') {
+        l.etat_actuel = el.dataset.v;
+        rendreFiche();
+      } else if (act === 'motif') {
+        const m = el.dataset.v;
+        l.motif = String(l.motif || '').trim() ? String(l.motif).trim() + ' — ' + m : m;
+        const t = $('#asMotif');
+        t.value = l.motif;
+        t.classList.remove('err');
+        majPiedFiche();
+      }
+    });
+    box.addEventListener('input', function (e) {
+      const f = e.target.dataset.f;
+      if (!f || !AS.l) return;
+      AS.l[f] = f === 'quantite' ? Math.max(1, parseInt(e.target.value, 10) || 1) : e.target.value;
+      e.target.classList.remove('err');
+      if (f === 'libelle') $('#asT').textContent = e.target.value.trim() || 'Autre article';
+      majPiedFiche();
+    });
+    box.addEventListener('change', function (e) {
+      if (e.target.dataset.f === 'quantite' && AS.l) e.target.value = AS.l.quantite;
+    });
+  }
+
+  function ouvrirFiche(ligne, nouveau) {
+    AS.uid = ligne ? ligne.uid : null;
+    AS.essai = !!(ligne && manques(ligne).length);
+    AS.l = Object.assign({ quantite: 1, type_besoin: '', caracteristiques: '', motif: '', annee_acquisition: '', etat_actuel: '', libelle: '', autre: false }, ligne || nouveau);
+    const c = cat(AS.l.categorie);
+    $('#as').style.setProperty('--c', c.couleur);
+    $('#asIc').innerHTML = ico(AS.l.autre ? 'pencil-line' : icoArticle(AS.l.libelle, AS.l.categorie));
+    $('#asC').textContent = c.libelle;
+    $('#asT').textContent = AS.l.libelle || 'Autre article';
+    $('#asDel').hidden = !ligne;
+    $('#asOk').innerHTML = ligne ? ico('check') + 'Enregistrer' : ico('plus') + 'Ajouter à ma demande';
+    rendreFiche();
+    $('#as').hidden = false;
+    $('#asB').scrollTop = 0;
+    document.body.classList.add('as-on');
+    majFlow();
+    icones();
+    setTimeout(function () {
+      const lib = $('#asB [data-f="libelle"]');
+      if (lib && !lib.value) lib.focus();
+      else if (window.innerWidth > 700) { const b = $('#asB .opt button'); if (b) b.focus(); }
+    }, 60);
+  }
+
+  function fermerFiche() {
+    if ($('#as').hidden) return;
+    $('#as').hidden = true;
+    document.body.classList.remove('as-on');
+    AS.l = null;
+    AS.uid = null;
+    majFlow();
+  }
+
+  function rendreFiche() {
+    const l = AS.l;
+    const m = AS.essai ? manques(l) : [];
+    const err = function (k) { return m.indexOf(k) >= 0 ? ' err' : ''; };
+    const an = new Date().getFullYear();
+    $('#asB').innerHTML =
+      (l.autre ? '<label class="fl" for="asLib">Article demandé</label><input class="in' + err("l'article") + '" id="asLib" data-f="libelle" value="' + esc(l.libelle) + '" placeholder="Précisez l\'article (marque, modèle…)" maxlength="120">' : '') +
+      '<label class="fl" for="asQte">Quantité</label>' +
+      '<div class="as-qr"><div class="qty"><button type="button" data-act="moins" aria-label="Diminuer la quantité">−</button>' +
+        '<input id="asQte" data-f="quantite" type="number" min="1" inputmode="numeric" value="' + esc(l.quantite) + '">' +
+        '<button type="button" data-act="plus" aria-label="Augmenter la quantité">+</button></div><span class="qty-h">unité(s) demandée(s)</span></div>' +
+      '<label class="fl">Type de besoin</label>' +
+      '<div class="opt' + err('le type') + '" role="radiogroup">' + typesDe(l.categorie).map(function (t) {
+        const a = AIDE_TYPES[t] || ['circle-dot', ''];
+        return '<button type="button" role="radio" aria-checked="' + (l.type_besoin === t) + '" class="' + (l.type_besoin === t ? 'on' : '') + '" data-act="type" data-v="' + esc(t) + '"><b>' + ico(a[0]) + esc(t) + '</b>' + (a[1] ? '<small>' + esc(a[1]) + '</small>' : '') + '</button>';
+      }).join('') + '</div>' +
+      (avecEquipement(l) ? '<div class="eq"><p class="eq-t">' + ico('history') + 'Équipement actuel à remplacer</p>' +
+        '<label class="fl" for="asAn">Année d\'acquisition</label><input class="in' + err("l'année d'acquisition") + '" id="asAn" data-f="annee_acquisition" type="number" inputmode="numeric" min="1980" max="' + an + '" placeholder="Ex. : 2019" value="' + esc(l.annee_acquisition) + '">' +
+        '<label class="fl">État actuel</label><div class="pills' + err("l'état actuel") + '">' + C.ETATS_EQUIPEMENT.map(function (x) {
+          return '<button type="button" class="pill' + (l.etat_actuel === x ? ' on' : '') + '" data-act="etat" data-v="' + esc(x) + '">' + esc(x) + '</button>';
+        }).join('') + '</div></div>' : '') +
+      '<label class="fl" for="asMotif">Motif <small>— l\'élément clé pour la validation</small></label>' +
+      '<textarea class="in' + err('le motif') + '" id="asMotif" data-f="motif" rows="3" maxlength="1000" placeholder="Pourquoi ce besoin ? Ex. : l\'imprimante de la caisse 2 ne fonctionne plus depuis juin.">' + esc(l.motif) + '</textarea>' +
+      '<div class="quick">' + C.MOTIFS_RAPIDES.map(function (q) { return '<button type="button" data-act="motif" data-v="' + esc(q) + '">' + ico('plus') + esc(q) + '</button>'; }).join('') + '</div>' +
+      '<label class="fl" for="asCar">Caractéristiques <small>(facultatif)</small></label>' +
+      '<input class="in" id="asCar" data-f="caracteristiques" value="' + esc(l.caracteristiques) + '" maxlength="300" placeholder="Ex. : Core i7, 16 Go RAM, 512 Go SSD">';
+    majPiedFiche();
+    icones();
+  }
+
+  function majPiedFiche() {
+    const m = manques(AS.l);
+    $('#asM').className = 'as-m' + (m.length ? '' : ' ok');
+    $('#asM').innerHTML = m.length ? ico('circle-alert') + 'À préciser : ' + esc(m.join(', ')) : ico('circle-check') + 'Tout est prêt';
+    icones();
+  }
+
+  function validerFiche() {
+    const l = AS.l;
+    l.libelle = String(l.libelle || '').trim();
+    if (manques(l).length) {
+      AS.essai = true;
+      rendreFiche();
+      const e = $('#asB .err');
+      if (e) { e.scrollIntoView({ behavior: 'smooth', block: 'center' }); if (/INPUT|TEXTAREA/.test(e.tagName)) e.focus(); }
+      return;
+    }
+    if (!avecEquipement(l)) { l.annee_acquisition = ''; l.etat_actuel = ''; }
+    const propre = {
+      categorie: l.categorie, libelle: l.libelle, autre: !!l.autre, quantite: parseInt(l.quantite, 10) || 1, type_besoin: l.type_besoin,
+      caracteristiques: l.caracteristiques || '', motif: l.motif, annee_acquisition: l.annee_acquisition, etat_actuel: l.etat_actuel,
     };
-    S.panier.push(l);
+    const existante = AS.uid && S.panier.find(function (x) { return x.uid === AS.uid; });
+    let uid;
+    if (existante) { Object.assign(existante, propre); uid = existante.uid; } else { uid = nouvelUid(); S.panier.push(Object.assign({ uid: uid }, propre)); }
+    fermerFiche();
     sauverPanier();
     rendreNouveau();
-    const el = $('[data-uid="' + l.uid + '"]');
-    if (el) {
-      el.classList.add('flash');
-      if (window.innerWidth > 1024) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-      const f = el.querySelector(autre ? '[data-f="libelle"]' : '.dl-types button');
-      if (f && autre) f.focus();
-    }
+    flashLigne(uid);
+    toast(existante ? 'Modifications enregistrées.' : '« ' + propre.libelle + ' » ajouté à votre demande.', 'ok');
   }
+
+  /* ---------- Ma demande ---------- */
 
   function htmlLigne(l) {
     const c = cat(l.categorie);
     const m = manques(l);
-    const ok = !m.length;
-    const ouvert = l.open || !ok;
-    const types = typesDe(l.categorie);
-    return '<div class="dl' + (ok ? ' ok' : '') + (ouvert ? ' open' : '') + '" data-uid="' + l.uid + '" style="--c:' + c.couleur + '">' +
-      '<div class="dl-h">' +
-        '<span class="dl-ic">' + ico(icoArticle(l.libelle, l.categorie)) + '</span>' +
-        '<div class="dl-n"><b>' + esc(l.libelle || 'Article à préciser') + '</b><small>' + esc(c.libelle) + (l.type_besoin ? ' · ' + esc(l.type_besoin) : '') + '</small></div>' +
-        '<div class="qty qty-sm"><button type="button" data-act="moins" aria-label="Moins">−</button><input data-f="quantite" type="number" min="1" inputmode="numeric" value="' + esc(l.quantite) + '" aria-label="Quantité"><button type="button" data-act="plus" aria-label="Plus">+</button></div>' +
-        '<button type="button" class="dl-x" data-act="rm" title="Retirer cette ligne">' + ico('trash-2') + '</button>' +
-      '</div>' +
-      (ouvert ? '<div class="dl-b">' +
-        (l.autre ? '<label class="dl-l">Article *</label><input class="in" data-f="libelle" value="' + esc(l.libelle) + '" placeholder="Précisez l\'article demandé">' : '') +
-        '<label class="dl-l">Type de besoin *</label>' +
-        '<div class="dl-types">' + types.map(function (t) {
-          return '<button type="button" class="pill' + (l.type_besoin === t ? ' on' : '') + '" data-act="type" data-v="' + esc(t) + '">' + esc(t) + '</button>';
-        }).join('') + '</div>' +
-        (avecEquipement(l) ? '<div class="eq"><p class="eq-t">' + ico('history') + 'Équipement actuel</p><div class="fr">' +
-          '<div class="fcol"><label class="dl-l">Année d\'acquisition *</label><input class="in" data-f="annee_acquisition" type="number" inputmode="numeric" min="1980" max="' + new Date().getFullYear() + '" placeholder="Ex. : 2019" value="' + esc(l.annee_acquisition) + '"></div>' +
-          '<div class="fcol"><label class="dl-l">État actuel *</label><select class="in" data-f="etat_actuel"><option value="">— Choisir —</option>' +
-            C.ETATS_EQUIPEMENT.map(function (e) { return '<option' + (l.etat_actuel === e ? ' selected' : '') + '>' + esc(e) + '</option>'; }).join('') +
-          '</select></div></div></div>' : '') +
-        '<label class="dl-l">Motif *</label>' +
-        '<textarea class="in" data-f="motif" rows="2" placeholder="Pourquoi ce besoin ? C\'est l\'élément clé pour la validation.">' + esc(l.motif) + '</textarea>' +
-        '<div class="quick">' + C.MOTIFS_RAPIDES.map(function (q) { return '<button type="button" data-act="motif" data-v="' + esc(q) + '">+ ' + esc(q) + '</button>'; }).join('') + '</div>' +
-        (l.caracteristiques || l.voirCar
-          ? '<label class="dl-l">Caractéristiques</label><input class="in" data-f="caracteristiques" value="' + esc(l.caracteristiques) + '" placeholder="Ex. : Core i7, 16 Go RAM, 512 Go SSD">'
-          : '<button type="button" class="lk dl-car" data-act="car">' + ico('plus') + 'Préciser des caractéristiques (facultatif)</button>') +
-      '</div>' : '') +
-      '<div class="dl-s"><span class="dl-st"></span>' +
-        (ok ? '<button type="button" class="lk" data-act="toggle">' + (ouvert ? 'Réduire' : 'Modifier') + '</button>' : '') +
-      '</div>' +
+    const det = [l.type_besoin, String(l.motif || '').trim()].filter(Boolean).join(' · ');
+    return '<div class="ci' + (m.length ? ' todo' : '') + '" data-uid="' + esc(l.uid) + '" style="--c:' + c.couleur + '">' +
+      '<span class="dl-ic">' + ico(icoArticle(l.libelle, l.categorie)) + '</span>' +
+      '<button type="button" class="ci-m" data-act="edit" title="Modifier">' +
+        '<b>' + esc(l.libelle || 'Article à préciser') + '</b>' +
+        (m.length ? '<span class="ci-todo">' + ico('circle-alert') + 'À compléter : ' + esc(m.join(', ')) + '</span>' : '<small>' + esc(det) + '</small>') +
+      '</button>' +
+      '<span class="ci-q">× ' + nombre(l.quantite) + '</span>' +
+      '<button type="button" class="ci-x" data-act="edit" title="Modifier" aria-label="Modifier">' + ico('pencil') + '</button>' +
+      '<button type="button" class="ci-x rm" data-act="rm" title="Retirer" aria-label="Retirer">' + ico('trash-2') + '</button>' +
     '</div>';
   }
 
-  function majEtatLigne(el, l) {
-    const m = manques(l);
-    const st = el.querySelector('.dl-st');
-    el.classList.toggle('ok', !m.length);
-    el.classList.toggle('has-motif', !!String(l.motif || '').trim());
-    st.innerHTML = m.length ? ico('circle-alert') + 'À compléter : ' + m.join(', ') : ico('circle-check') + 'Ligne complète';
-    icones();
-  }
-
-  function remplacerLigne(el, l) {
-    const tmp = document.createElement('div');
-    tmp.innerHTML = htmlLigne(l);
-    const neu = tmp.firstChild;
-    el.replaceWith(neu);
-    majEtatLigne(neu, l);
-    majPiedDemande();
-    rendreCatalogue();
-  }
-
   function rendreDemande() {
-    const box = $('#demLignes');
-    const v = valideurTxt({ poste: S.session.poste, demandeur: S.session.nom, demandeur_id: S.session.id });
-    $('#demWho').innerHTML = ico('user-round') + '<span>Au nom de <b>' + esc(S.session.nom) + '</b> · ' + esc(S.session.poste) + ' · ' + esc(S.session.site) + '<br>Validation par <b>' + esc(v) + '</b></span>';
-    if (NV.envoye) {
-      box.innerHTML = '<div class="dem-ok"><div class="ok-ic">' + ico('check') + '</div><h3>Demande envoyée</h3>' +
-        '<p class="cs">' + NV.envoye.n + ' besoin(s) transmis à ' + esc(v) + ' pour validation.</p>' +
-        '<div class="ok-ref">' + esc(NV.envoye.ref) + '</div>' +
-        '<div class="dem-ok-b"><button type="button" class="btn bo" data-act="voir-mes">' + ico('list-checks') + 'Suivre mes besoins</button>' +
-        '<button type="button" class="btn bp" data-act="nouvelle">' + ico('plus') + 'Nouvelle demande</button></div></div>';
-      $('#demSub').textContent = '';
-      $('#demVider').hidden = true;
-      $('#demMsg').textContent = '';
-      $('#nvDem .dem-f').hidden = true;
-      icones();
-      return;
-    }
-    $('#nvDem .dem-f').hidden = false;
-    box.innerHTML = S.panier.length
+    $('#demWho').innerHTML = ico('user-round') + '<span>Au nom de <b>' + esc(S.session.nom) + '</b> · ' + esc(S.session.poste) + ' · ' + esc(S.session.site) + '<br>Validation par <b>' + esc(monValideur()) + '</b></span>';
+    $('#demLignes').innerHTML = S.panier.length
       ? S.panier.map(htmlLigne).join('')
-      : '<div class="dem-vide"><div class="dem-vide-ic">' + ico('mouse-pointer-click') + '</div><b>Votre demande est vide</b><span>Cliquez sur un article du catalogue pour l\'ajouter ici.</span></div>';
-    $$('#demLignes [data-uid]').forEach(function (el) {
-      const l = S.panier.find(function (x) { return String(x.uid) === el.dataset.uid; });
-      if (l) majEtatLigne(el, l);
-    });
+      : '<div class="dem-vide"><div class="dem-vide-ic">' + ico('mouse-pointer-click') + '</div><b>Votre demande est vide</b><span>Touchez un article du catalogue pour l\'ajouter.</span>' +
+        '<ol><li><span>1</span>Choisissez un article</li><li><span>2</span>Précisez quantité, type et motif</li><li><span>3</span>Envoyez votre demande</li></ol></div>';
     majPiedDemande();
     icones();
   }
@@ -1448,35 +1574,45 @@
     const n = S.panier.length;
     const incompletes = S.panier.filter(function (l) { return manques(l).length; }).length;
     const qte = somme(S.panier, function (l) { return l.quantite; });
-    $('#demSub').textContent = n ? n + ' ligne(s) · ' + nombre(qte) + ' unité(s)' : 'Aucun article pour le moment';
+    $('#demN').hidden = !n;
+    $('#demN').textContent = n;
+    $('#demSub').textContent = n ? n + ' article(s) · ' + nombre(qte) + ' unité(s)' : 'Aucun article pour le moment';
     $('#demVider').hidden = !n;
     $('#demEnvoyer').disabled = !n || incompletes > 0;
     $('#demEnvoyerTxt').textContent = n ? 'Envoyer ma demande (' + n + ')' : 'Envoyer ma demande';
     $('#demMsg').className = 'dem-msg' + (incompletes ? ' warn' : '');
-    $('#demMsg').textContent = !n ? '' : incompletes ? incompletes + ' ligne(s) à compléter avant l\'envoi.' : 'Tout est prêt : vous pouvez envoyer.';
+    $('#demMsg').innerHTML = !n ? '' : incompletes ? ico('circle-alert') + incompletes + ' article(s) à compléter avant l\'envoi.' : ico('circle-check') + 'Tout est prêt : vous pouvez envoyer.';
+    majFlow();
     majCompteurPanier();
     majBarreMobile();
-    rendreCatalogue();
+  }
+
+  function majFlow() {
+    const n = S.panier.length;
+    const pret = n && !S.panier.some(function (l) { return manques(l).length; });
+    const etape = !$('#as').hidden ? 2 : pret ? 3 : n ? 2 : 1;
+    $$('#nvFlow li').forEach(function (li) {
+      const k = Number(li.dataset.f);
+      li.classList.toggle('on', k === etape);
+      li.classList.toggle('ok', k < etape);
+    });
   }
 
   function majBarreMobile() {
     const bar = $('#nvBar');
-    bar.hidden = !(S.vue === 'nouveau' && S.panier.length && window.innerWidth <= 1024 && !NV.envoye);
+    bar.hidden = !(S.vue === 'nouveau' && S.panier.length && window.innerWidth <= 1024);
     $('#nvBarN').textContent = S.panier.length;
   }
 
   async function envoyerDemande() {
     const premier = S.panier.find(function (l) { return manques(l).length; });
     if (premier) {
-      premier.open = true;
-      rendreDemande();
-      const el = $('[data-uid="' + premier.uid + '"]');
-      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      ouvrirFiche(premier);
       toast('Complétez : ' + manques(premier).join(', ') + '.', 'err');
       return;
     }
     if (!S.panier.length) return;
-    const v = valideurTxt({ poste: S.session.poste, demandeur: S.session.nom, demandeur_id: S.session.id });
+    const v = monValideur();
     const n = S.panier.length;
     const ok = await confirmer({
       ton: 'info', ico: 'send', titre: 'Envoyer votre demande ?',
@@ -1503,8 +1639,8 @@
       actualiser(true);
       const suivre = await confirmer({
         ton: 'success', ico: 'check', titre: 'Demande envoyée !',
-        texte: items.length + ' besoin' + (items.length > 1 ? 's' : '') + ' transmis à <b>' + esc(v) + '</b>. Vous serez informé de la décision dans « ' + esc($('#sbMes').textContent) + ' ».',
-        extra: '<div class="cf-ref"><small>Référence de la demande</small><b>' + esc(r.ref) + '</b></div>',
+        texte: items.length + ' besoin' + (items.length > 1 ? 's' : '') + ' transmis à <b>' + esc(v) + '</b>. Vous suivrez la décision dans « ' + esc($('#sbMes').textContent) + ' ».',
+        extra: '<div class="cf-ref"><small>Référence de la demande</small><b>' + esc(r.ref) + '</b><span>À indiquer au valideur en cas de question.</span></div>',
         ok: 'Suivre mes besoins', okIco: 'list-checks', annuler: 'Nouvelle demande', annulerIco: 'plus',
       });
       if (suivre) allerVue('mes');
@@ -1518,14 +1654,13 @@
   }
 
   function sauverPanier() {
-    memoire.ecrire(clePanier(), S.panier.map(function (l) { const c = Object.assign({}, l); delete c.voirCar; return c; }));
+    memoire.ecrire(clePanier(), S.panier.map(function (l) { const c = Object.assign({}, l); delete c.voirCar; delete c.open; return c; }));
     majCompteurPanier();
   }
 
   function majCompteurPanier() {
     const n = S.panier.length;
-    $('#sbCart').hidden = !n;
-    $('#sbCart').textContent = n;
+    [$('#sbCart'), $('#bnCart')].forEach(function (el) { el.hidden = !n; el.textContent = n; });
   }
 
   /* ================= Vue « Mes besoins » ================= */
@@ -1533,7 +1668,7 @@
   const MES = { statut: '', q: '' };
 
   function initMes() {
-    $('#mesChips').addEventListener('click', function (e) {
+    $('#mesStats').addEventListener('click', function (e) {
       const b = e.target.closest('[data-s]');
       if (!b) return;
       MES.statut = b.dataset.s;
@@ -1553,55 +1688,94 @@
       .sort(function (a, b) { return String(b[0].cree_le).localeCompare(String(a[0].cree_le)); });
   };
 
+  const fJour = function (v) { const d = date(v); return d ? d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }) : '—'; };
+  // Référence d'une demande, attribuée par le serveur à chaque envoi : B = Besoins, 27 = Budget 2027, puis le numéro d'ordre.
+  const refHtml = function (ref) {
+    const n = String(ref).split('-').pop();
+    return '<span class="ref" title="Référence de la demande : B = Besoins, 27 = Budget 2027, ' + esc(n) + ' = numéro d\'ordre de la demande. À communiquer au valideur en cas de question.">Réf. ' + esc(ref) + '</span>';
+  };
+
+  // État global d'une demande, d'après ses lignes.
+  function etatDemande(g) {
+    const n = g.length;
+    const v = g.filter(function (b) { return b.statut === 'VALIDE'; }).length;
+    const r = g.filter(function (b) { return b.statut === 'REJETE'; }).length;
+    if (!v && !r) return { cls: 'att', ico: 'hourglass', txt: 'En attente de validation' };
+    if (v + r < n) return { cls: 'cours', ico: 'loader', txt: 'En cours · ' + (v + r) + '/' + n + ' examiné(s)' };
+    if (v === n) return { cls: 'ok', ico: 'circle-check', txt: n > 1 ? 'Entièrement validée' : 'Validée' };
+    if (r === n) return { cls: 'ko', ico: 'circle-x', txt: 'Rejetée' };
+    return { cls: 'ok', ico: 'circle-check', txt: 'Traitée · ' + v + ' validé(s), ' + r + ' rejeté(s)' };
+  }
+
   function rendreMes() {
-    const caisse = !(posteDef(S.session.poste) || {}).siege;
+    const caisse = estCaisse();
     const toutes = S.besoins.filter(function (b) { return caisse ? !peutDecider(b) : estMien(b); });
     $('#mesTitre').textContent = caisse ? 'Besoins du site ' + S.session.site : 'Mes besoins';
     $('#mesSub').textContent = caisse
-      ? 'Les besoins exprimés par les caissières de ' + S.session.site + ' et leur validation.'
-      : 'Le suivi de vos demandes et de leur validation par ' + valideurTxt({ poste: S.session.poste, demandeur: S.session.nom, demandeur_id: S.session.id }) + '.';
+      ? 'Les besoins exprimés par les caissières de ' + S.session.site + ' et leur validation par ' + monValideur() + '.'
+      : 'Le suivi de vos demandes et de leur validation par ' + monValideur() + '.';
+    $('#mesListeT').textContent = caisse ? 'Demandes du site' : 'Mes demandes';
     const st = stats(toutes);
-    const carte = function (icone, label, val, sous, cls) {
-      return '<div class="st ' + cls + '"><span class="st-i">' + ico(icone) + '</span><div><p class="st-l">' + label + '</p><p class="st-v">' + val + '</p><p class="st-s">' + sous + '</p></div></div>';
+    const nbDem = groupes(toutes).length;
+    // Anneau : part des lignes examinées (vert = validé, rouge = rejeté, gris = en attente).
+    const pv = st.n ? st.VALIDE / st.n * 100 : 0;
+    const pr = st.n ? st.REJETE / st.n * 100 : 0;
+    const filtre = function (s, label, n, sous, couleur) {
+      return '<button type="button" class="mk' + (MES.statut === s ? ' on' : '') + '" data-s="' + s + '" style="--mk:' + couleur + '" aria-pressed="' + (MES.statut === s) + '">' +
+        '<span>' + label + '</span><b>' + nombre(n) + '</b><small>' + sous + '</small></button>';
     };
-    $('#mesStats').innerHTML = [
-      carte('send', 'Demandes envoyées', nombre(groupes(toutes).length), nombre(st.n) + ' ligne(s) · ' + nombre(st.qte) + ' unité(s)', 'st-b'),
-      carte('hourglass', 'En attente', nombre(st.EN_ATTENTE), nombre(st.qteAttente) + ' unité(s)', 'st-w'),
-      carte('circle-check', 'Validés', nombre(st.VALIDE), nombre(st.qteValidee) + ' unité(s) validée(s)', 'st-g'),
-      carte('circle-x', 'Rejetés', nombre(st.REJETE), st.REJETE ? 'voir le motif du rejet' : 'aucun rejet', 'st-r'),
-    ].join('');
+    $('#mesStats').innerHTML =
+      '<div class="mes-prog">' +
+        '<div class="ring" style="background:conic-gradient(#047857 0 ' + pv + '%,#be123c ' + pv + '% ' + (pv + pr) + '%,#eef2f6 ' + (pv + pr) + '% 100%)"><span><b>' + st.taux + '%</b><small>examinés</small></span></div>' +
+        '<div class="mes-prog-t"><b>' + nombre(nbDem) + ' demande(s) envoyée(s)</b><small>' + nombre(st.n) + ' article(s) · ' + nombre(st.qte) + ' unité(s) demandée(s)</small>' +
+          (st.EN_ATTENTE ? '<small class="att">' + ico('hourglass') + nombre(st.EN_ATTENTE) + ' en attente de ' + esc(monValideur()) + '</small>' : st.n ? '<small class="fini">' + ico('circle-check') + 'Tout a été examiné</small>' : '') + '</div>' +
+      '</div>' +
+      '<div class="mes-kpis" role="group" aria-label="Filtrer par statut">' +
+        filtre('', 'Tous', st.n, 'article(s)', '#0f172a') +
+        filtre('EN_ATTENTE', 'En attente', st.EN_ATTENTE, nombre(st.qteAttente) + ' unité(s)', '#ea580c') +
+        filtre('VALIDE', 'Validés', st.VALIDE, nombre(st.qteValidee) + ' unité(s) accordée(s)', '#047857') +
+        filtre('REJETE', 'Rejetés', st.REJETE, st.REJETE ? 'motif indiqué' : 'aucun rejet', '#be123c') +
+      '</div>';
     const q = sansAccents(MES.q).trim();
     let liste = toutes.filter(function (b) {
-      return !q || sansAccents([b.id, b.ref, b.libelle, b.motif, b.demandeur, b.type_besoin].join(' ')).includes(q);
+      return !q || sansAccents([b.id, b.ref, b.libelle, b.motif, b.demandeur, b.type_besoin, fJour(b.cree_le), fDate(b.cree_le)].join(' ')).includes(q);
     });
-    $('#mesChips').innerHTML = [['', 'Tous']].concat(ORDRE_STATUTS.map(function (s) { return [s, STATUTS[s].pluriel]; })).map(function (c) {
-      const n = c[0] ? liste.filter(function (b) { return b.statut === c[0]; }).length : liste.length;
-      return '<button type="button" class="fb' + (MES.statut === c[0] ? ' on' : '') + '" data-s="' + c[0] + '">' + c[1] + ' <i>' + n + '</i></button>';
-    }).join('');
     if (MES.statut) liste = liste.filter(function (b) { return b.statut === MES.statut; });
     const gs = groupes(liste);
     $('#mesListe').innerHTML = gs.length ? gs.map(function (g) {
-      const traites = g.filter(function (b) { return b.statut !== 'EN_ATTENTE'; }).length;
-      const pct = Math.round(traites / g.length * 100);
-      return '<div class="grp"><div class="grp-h">' +
-        '<div class="grp-t"><b>Demande ' + esc(g[0].ref) + '</b><small>' + fDateHeure(g[0].cree_le) + ' · ' + g.length + ' besoin(s)' + (caisse ? ' · ' + esc(g[0].demandeur) + ' (' + esc(g[0].poste) + ')' : '') + '</small></div>' +
-        '<div class="grp-p"><div class="pbt"><div class="pbf" style="width:' + pct + '%;background:#047857"></div></div><span>' + traites + '/' + g.length + ' traité(s)</span></div>' +
-        '</div>' + g.map(ligneSuivi).join('') + '</div>';
+      // L'état porte sur la demande entière, même si un filtre masque certaines lignes.
+      const complet = toutes.filter(function (b) { return b.ref === g[0].ref; });
+      const e = etatDemande(complet);
+      const n = complet.length;
+      const seg = function (s, coul) { const k = complet.filter(function (b) { return b.statut === s; }).length; return k ? '<span style="width:' + (k / n * 100) + '%;background:' + coul + '"></span>' : ''; };
+      return '<article class="grp dmd">' +
+        '<header class="dmd-h">' +
+          '<span class="dmd-i">' + ico('file-text') + '</span>' +
+          '<div class="grp-t"><b>Demande du ' + fJour(g[0].cree_le) + '</b>' +
+            '<small>' + refHtml(g[0].ref) + ' · ' + n + ' article(s) · ' + nombre(somme(complet, function (b) { return b.quantite; })) + ' unité(s) · envoyée à ' + fHeure(g[0].cree_le) +
+            (caisse ? ' · par ' + esc(g[0].demandeur) : '') + '</small></div>' +
+          '<span class="dst dst-' + e.cls + '">' + ico(e.ico) + e.txt + '</span>' +
+        '</header>' +
+        '<div class="dmd-bar" aria-hidden="true">' + seg('VALIDE', '#047857') + seg('REJETE', '#be123c') + '</div>' +
+        g.map(ligneSuivi).join('') + '</article>';
     }).join('') : '<div class="card nd">' + ico('inbox') + (toutes.length ? 'Aucun besoin ne correspond.' : 'Aucun besoin envoyé pour le moment.') +
-      (toutes.length ? '' : '<button type="button" class="btn bp" data-goto="nouveau" style="margin-top:6px">' + ico('plus') + 'Exprimer un besoin</button>') + '</div>';
+      (toutes.length ? '' : '<button type="button" class="btn bp" data-goto="nouveau">' + ico('plus') + 'Exprimer un besoin</button>') + '</div>';
     icones();
   }
 
   function ligneSuivi(b) {
     const c = cat(b.categorie);
     const details = [esc(b.type_besoin), equipTxt(b) ? esc(equipTxt(b)) : '', b.caracteristiques ? esc(b.caracteristiques) : ''].filter(Boolean).join(' · ');
+    const reduit = b.statut === 'VALIDE' && Number(b.quantite_validee) < Number(b.quantite);
     return '<button type="button" class="gr" data-id="' + esc(b.id) + '" style="--c:' + c.couleur + '">' +
       '<span class="dl-ic">' + ico(icoArticle(b.libelle, b.categorie)) + '</span>' +
       '<span class="gr-a"><b>' + esc(b.libelle) + '</b><small>' + details + '</small>' +
         (b.statut === 'REJETE' && b.commentaire_bo ? '<span class="gr-rej">' + ico('message-square-warning') + esc(b.commentaire_bo) + '</span>' : '') + '</span>' +
-      '<span class="gr-q"><small>Demandé</small><b>' + nombre(b.quantite) + '</b></span>' +
-      '<span class="gr-q"><small>Validé</small><b>' + (b.statut === 'VALIDE' ? nombre(b.quantite_validee) : '—') + '</b></span>' +
-      '<span class="gr-s">' + badgeStatut(b.statut) + (b.traite_par ? '<small>' + esc(b.traite_par) + '</small>' : '') + '</span>' +
+      '<span class="gr-qs">' +
+        '<span class="gr-q"><small>Demandé</small><b>' + nombre(b.quantite) + '</b></span>' +
+        '<span class="gr-q' + (b.statut === 'VALIDE' ? ' v' : '') + (reduit ? ' r' : '') + '"><small>Validé</small><b>' + (b.statut === 'VALIDE' ? nombre(b.quantite_validee) : '—') + '</b></span>' +
+      '</span>' +
+      '<span class="gr-s">' + badgeStatut(b.statut) + (b.traite_par ? '<small>par ' + esc(b.traite_par) + '</small>' : '') + '</span>' +
     '</button>';
   }
 
@@ -1681,11 +1855,17 @@
     if (!estBO()) return;
     const mien = S.besoins.filter(peutDecider);
     const attente = mien.filter(function (b) { return b.statut === 'EN_ATTENTE'; });
-    $('#nbValider').hidden = !attente.length;
-    $('#nbValider').textContent = attente.length;
+    [$('#nbValider'), $('#bnValider')].forEach(function (el) { el.hidden = !attente.length; el.textContent = attente.length; });
     $('#valSub').textContent = estManager()
       ? 'Besoins exprimés par les responsables et les managers.'
       : 'Besoins que vous validez : ' + (C.VALIDEURS[S.session.nom] ? C.VALIDEURS[S.session.nom].postes.concat(C.VALIDEURS[S.session.nom].personnes).join(', ') : '') + '.';
+    const demandeurs = Object.keys(attente.reduce(function (m, b) { m[b.site + '|' + b.demandeur] = 1; return m; }, {})).length;
+    const anciens = attente.filter(function (b) { return joursDepuis(b.cree_le) >= C.SEUIL_ATTENTE_JOURS; }).length;
+    $('#valSum').className = 'val-sum' + (attente.length ? '' : ' done');
+    $('#valSum').innerHTML = '<span class="val-sum-i">' + ico(attente.length ? 'stamp' : 'party-popper') + '</span><div>' + (attente.length
+      ? '<b>' + attente.length + ' besoin(s) attendent votre décision</b><small>' + nombre(somme(attente, function (b) { return b.quantite; })) + ' unité(s) · ' + demandeurs + ' demandeur(s)' +
+        (anciens ? ' · <b style="display:inline;font-size:inherit;color:var(--danger)">' + anciens + ' en attente depuis plus de ' + C.SEUIL_ATTENTE_JOURS + ' jours</b>' : '') + '</small>'
+      : '<b>Tout est à jour</b><small>Aucun besoin n\'attend votre décision pour le moment.</small>') + '</div>';
     $('#valTabs').innerHTML = [['attente', 'À traiter', attente.length], ['traites', 'Déjà traités', mien.length - attente.length]].map(function (o) {
       return '<button type="button" class="fb' + (VAL.onglet === o[0] ? ' on' : '') + '" data-o="' + o[0] + '">' + o[1] + ' <i>' + o[2] + '</i></button>';
     }).join('');

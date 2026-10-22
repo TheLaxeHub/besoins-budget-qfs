@@ -30,13 +30,13 @@ window.APP_CONFIG = {
   // `personnes` ne sert qu'au MODE DÉMONSTRATION : en ligne, la liste (avec les e-mails) vient de
   // l'onglet « Personnes » de la feuille Google Sheets.
   POSTES: [
-    { libelle: 'Caissière ordinaire', siege: false, ico: 'user-round', aide: 'En agence' },
-    { libelle: 'Caissière E-money', siege: false, ico: 'smartphone', aide: 'En agence' },
-    { libelle: 'Opérateur', siege: true, ico: 'headset', aide: 'Siège', personnes: ['Isaac Kone', 'Yasmine Kamagate', 'Anne Adjo'] },
-    { libelle: 'Assistant', siege: true, ico: 'clipboard-list', aide: 'Siège', personnes: ['Aminata Sow', 'Kady Bakayoko'] },
-    { libelle: 'Chef', siege: true, ico: 'user-cog', aide: 'Siège', personnes: ['Axel Kouamenan', 'Kader Soro'] },
-    { libelle: 'Responsable', siege: true, ico: 'shield-check', aide: 'Siège · valide', personnes: ['Zeinab Kone', 'Yaya Comara', 'Massandje Dagnoko', 'Rita Kessie'] },
-    { libelle: 'Manager', siege: true, ico: 'crown', aide: 'Siège · valide', personnes: ['Issa Kone', 'Jansenus Koffi'] },
+    { libelle: 'Caissière ordinaire', siege: false, ico: 'user-round', aide: 'Besoins de mon site' },
+    { libelle: 'Caissière E-money', siege: false, ico: 'smartphone', aide: 'Besoins de mon site' },
+    { libelle: 'Opérateur', siege: true, ico: 'headset', aide: 'Mes besoins', personnes: ['Isaac Kone', 'Yasmine Kamagate', 'Anne Adjo'] },
+    { libelle: 'Assistant', siege: true, ico: 'clipboard-list', aide: 'Mes besoins', personnes: ['Aminata Sow', 'Kady Bakayoko'] },
+    { libelle: 'Chef', siege: true, ico: 'user-cog', aide: 'Mes besoins', personnes: ['Axel Kouamenan', 'Kader Soro'] },
+    { libelle: 'Responsable', siege: true, ico: 'shield-check', aide: 'Besoins et validation', personnes: ['Zeinab Kone', 'Yaya Comara', 'Massandje Dagnoko', 'Rita Kessie'] },
+    { libelle: 'Manager', siege: true, ico: 'crown', aide: 'Validation des responsables', personnes: ['Issa Kone', 'Jansenus Koffi'] },
   ],
 
   // Responsables valideurs : chacun valide les besoins d'un poste en agence et de personnes du siège.
