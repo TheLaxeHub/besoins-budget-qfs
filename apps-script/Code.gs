@@ -314,6 +314,7 @@ function peutVoir_(s, b) {
   if (s.poste === 'Manager') return true;
   if (estMien_(s, b)) return true;
   if (s.id && EXPORTEURS.indexOf(s.nom) >= 0 && b.statut === 'VALIDE') return true; // export des besoins validés
+  if (s.id && DEMANDEURS_PERSONNEL.indexOf(s.nom) >= 0 && b.categorie === 'PERSONNEL') return true; // export de toutes les demandes de personnel
   if (s.poste === 'Responsable') return peutDecider_(s, b);
   if (POSTES_SITE.indexOf(s.poste) >= 0) return b.site === s.site && POSTES_SITE.indexOf(b.poste) >= 0;
   return false;

@@ -189,6 +189,7 @@
           </div>
           <div class="pg-act">
             <button type="button" class="btn bo" data-export id="mesExport" hidden><i data-lucide="file-spreadsheet"></i>Exporter les besoins validés</button>
+            <button type="button" class="btn bo" data-export-rh hidden><i data-lucide="users"></i>Exporter les demandes de personnel</button>
             <button type="button" class="btn bp" data-goto="nouveau"><i data-lucide="plus"></i>Nouveau besoin</button>
           </div>
         </header>
@@ -207,7 +208,10 @@
             <h1 class="vh-t">Besoins à valider</h1>
             <p class="vh-s" id="valSub"></p>
           </div>
-          <button type="button" class="btn bo" data-export><i data-lucide="file-spreadsheet"></i>Exporter les validés</button>
+          <div class="pg-act">
+            <button type="button" class="btn bo" data-export-rh hidden><i data-lucide="users"></i>Exporter les demandes de personnel</button>
+            <button type="button" class="btn bo" data-export><i data-lucide="file-spreadsheet"></i>Exporter les validés</button>
+          </div>
         </header>
         <div class="val-sum" id="valSum"></div>
         <div class="tcl">

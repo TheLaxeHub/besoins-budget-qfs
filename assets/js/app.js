@@ -480,6 +480,7 @@
     $('#bnMes').textContent = caisse ? 'Mon site' : 'Mes besoins';
     $('#nvHello').textContent = 'Bonjour ' + ss.nom;
     $('#mesExport').hidden = !Store.estExporteur(ss);
+    $$('[data-export-rh]').forEach(function (b) { b.hidden = !peutRh(); });
     $('#regTitle').textContent = estManager() ? 'Registre — besoins des responsables et des managers' : 'Registre — besoins validés par ' + ss.nom;
     $('#fVue').value = S.filtres.vue;
     $('#ftText').textContent = 'Quipux Financial Services — ' + C.APP_TITRE + ' · ' + new Date().getFullYear();
@@ -520,6 +521,7 @@
       if (g) allerVue(g.dataset.goto);
       const x = e.target.closest('[data-export]');
       if (x) exporterExcel();
+      if (e.target.closest('[data-export-rh]')) exporterRh();
     });
     window.addEventListener('popstate', surHash);
     window.addEventListener('hashchange', surHash);
@@ -2062,6 +2064,30 @@
     }
     const nom = 'Besoins_valides_' + C.CAMPAGNE.replace(/\s+/g, '_') + '_' + S.session.nom.replace(/\s+/g, '_') + '_' + fDate(new Date()).replace(/\//g, '-') + '.xlsx';
     XLSX.writeFile(wb, nom);
+    toast('Export Excel généré.', 'ok');
+  }
+
+  // Toutes les demandes de personnel (validées, en attente ou rejetées), pour les personnes de DEMANDEURS_PERSONNEL.
+  function exporterRh() {
+    if (!window.XLSX) { toast("La bibliothèque Excel n'a pas pu être chargée (connexion internet ?).", 'err'); return; }
+    if (!peutRh()) return;
+    const lignes = S.besoins.filter(estRh).sort(function (a, b) { return String(a.id).localeCompare(String(b.id)); });
+    if (!lignes.length) { toast('Aucune demande de personnel pour le moment.', 'err'); return; }
+    const ws = XLSX.utils.json_to_sheet(lignes.map(function (b) {
+      return {
+        'N°': b.id, 'Réf. demande': b.ref, 'Saisi le': fDateHeure(b.cree_le), 'Demandeur': b.demandeur, 'Poste du demandeur': b.poste,
+        'Poste / fonction demandé': b.libelle, 'Nature du besoin': b.type_besoin, 'Nombre de postes': Number(b.quantite) || 0, 'Type de contrat': b.contrat,
+        'Poste remplacé (si remplacement)': b.poste_remplace, 'Profil recherché (diplôme, expérience)': b.profil, 'Missions principales': b.missions,
+        'Rattachement (N+1)': b.rattachement, "Période d'entrée souhaitée": b.periode_entree, 'Justification du besoin': b.motif,
+        "Conséquence si le poste n'est pas pourvu": b.consequence, 'Priorité': b.priorite,
+        'Statut': (STATUTS[b.statut] || {}).libelle, 'Nombre de postes validé': b.statut === 'VALIDE' ? Number(b.quantite_validee) || 0 : '',
+        'Validation par': valideurTxt(b), 'Décision de': b.traite_par, 'Décision le': b.statut === 'EN_ATTENTE' ? '' : fDateHeure(b.maj_le), 'Commentaire du valideur': b.commentaire_bo,
+      };
+    }));
+    ws['!cols'] = [14, 11, 16, 18, 14, 28, 20, 10, 12, 26, 32, 40, 18, 12, 40, 36, 10, 11, 10, 18, 18, 16, 30].map(function (w) { return { wch: w }; });
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Demandes de personnel');
+    XLSX.writeFile(wb, 'Demandes_personnel_' + C.CAMPAGNE.replace(/\s+/g, '_') + '_' + fDate(new Date()).replace(/\//g, '-') + '.xlsx');
     toast('Export Excel généré.', 'ok');
   }
 
