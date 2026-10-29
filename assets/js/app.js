@@ -77,6 +77,11 @@
   const qteRetenue = function (b) { return b.statut === 'VALIDE' ? Number(b.quantite_validee) || 0 : b.statut === 'REJETE' ? 0 : Number(b.quantite) || 0; };
   const somme = function (l, f) { return l.reduce(function (s, x) { return s + (Number(f(x)) || 0); }, 0); };
   const estCaisse = function () { return !(posteDef(S.session.poste) || {}).siege; };
+  // Demandes de personnel : catégorie « rh » réservée à DEMANDEURS_PERSONNEL (le serveur applique la même règle).
+  const estRh = function (x) { return !!cat(x.categorie).rh; };
+  const peutRh = function () { return !!S.session && !!S.session.id && (C.DEMANDEURS_PERSONNEL || []).indexOf(S.session.nom) >= 0; };
+  const catsSaisie = function () { return CATS.filter(function (c) { return !c.rh || peutRh(); }); };
+  const rhTxt = function (b) { return estRh(b) ? [b.contrat, b.periode_entree, b.priorite ? 'Priorité ' + String(b.priorite).toLowerCase() : ''].filter(Boolean).join(' · ') : ''; };
 
   const badgeStatut = function (s) {
     const d = STATUTS[s] || STATUTS.EN_ATTENTE;
@@ -908,7 +913,7 @@
         '<td class="nw">' + fDate(b.cree_le) + '<div class="sub">' + fHeure(b.cree_le) + '</div></td>' +
         (bo ? '<td class="nw"><b>' + esc(b.site) + '</b><div class="sub">' + esc(b.demandeur) + (b.poste ? ' · ' + esc(b.poste) : '') + '</div></td>' : '') +
         '<td>' + badgeCat(b.categorie) + '</td>' +
-        '<td><b>' + esc(b.libelle) + '</b>' + (b.caracteristiques ? '<div class="sub clip" title="' + esc(b.caracteristiques) + '">' + esc(b.caracteristiques) + '</div>' : '') + '</td>' +
+        '<td><b>' + esc(b.libelle) + '</b>' + (b.caracteristiques || rhTxt(b) ? '<div class="sub clip" title="' + esc(b.caracteristiques || rhTxt(b)) + '">' + esc(b.caracteristiques || rhTxt(b)) + '</div>' : '') + '</td>' +
         '<td class="num"><span class="ib">' + nombre(b.quantite) + '</span></td>' +
         '<td class="ty">' + esc(b.type_besoin) + '</td>' +
         '<td>' + (equipTxt(b) ? esc(equipTxt(b)) : '<span class="z">—</span>') + '</td>' +
@@ -1035,8 +1040,18 @@
     if (!b) { fermerPanneau(); return; }
     $('#pId').textContent = b.id + ' · ' + b.site;
     $('#pTitle').textContent = nombre(b.quantite) + ' × ' + b.libelle;
+    const rh = estRh(b);
     $('#pBody').innerHTML =
       '<div class="pst-row">' + badgeStatut(b.statut) + badgeCat(b.categorie) + '<span class="sub">Demande ' + esc(b.ref) + ' · saisie le ' + fDateHeure(b.cree_le) + '</span></div>' +
+      (rh ? '<div class="ps"><h3 class="pst">Le poste demandé</h3><div class="pg">' +
+        it('Poste / fonction', esc(b.libelle)) + it('Nombre de postes', '<b>' + nombre(b.quantite) + '</b>') +
+        it('Nature du besoin', esc(b.type_besoin)) + it('Type de contrat', esc(b.contrat)) +
+        (b.poste_remplace ? it('Poste remplacé', esc(b.poste_remplace), true) : '') +
+        it('Rattachement (N+1)', esc(b.rattachement)) + it("Période d'entrée souhaitée", esc(b.periode_entree)) +
+        it('Priorité', esc(b.priorite)) + it('Demandeur', esc(b.demandeur) + ' <span class="z">(' + esc(b.poste) + ')</span>') +
+        it('Profil recherché', esc(b.profil), true) + it('Missions principales', esc(b.missions), true) +
+        it("Conséquence si le poste n'est pas pourvu", esc(b.consequence), true) + it('Validation par', esc(valideurTxt(b))) +
+      '</div><p class="pil" style="margin:12px 0 6px">Justification du besoin</p><div class="ptx">' + esc(b.motif) + '</div></div>' :
       '<div class="ps"><h3 class="pst">Le besoin</h3><div class="pg">' +
         it('Article', esc(b.libelle)) + it('Quantité demandée', '<b>' + nombre(b.quantite) + '</b>') +
         it('Type de besoin', esc(b.type_besoin)) + it('Catégorie', esc(cat(b.categorie).libelle)) +
@@ -1047,7 +1062,7 @@
         it('Poste', esc(b.poste)) + it('Validation par', esc(valideurTxt(b))) +
         (equipTxt(b) ? it('Année d\'acquisition de l\'équipement actuel', esc(b.annee_acquisition)) + it('État de l\'équipement actuel', esc(b.etat_actuel)) : '') +
       '</div><p class="pil" style="margin:12px 0 6px">Motif</p><div class="ptx">' + esc(b.motif) + '</div>' +
-      '</div>' +
+      '</div>') +
       (b.statut !== 'EN_ATTENTE'
         ? '<div class="ps"><h3 class="pst">Décision</h3><div class="pg">' +
           it('Décision', badgeStatut(b.statut)) + it('Quantité validée', b.statut === 'VALIDE' ? '<b>' + nombre(b.quantite_validee) + '</b>' : '') +
@@ -1241,6 +1256,7 @@
     [/t[ée]l[ée]phone|fourreau|protection/i, 'smartphone'],
   ];
   const icoArticle = function (lib, catCode) {
+    if (cat(catCode).rh) return 'user-round';
     const t = ICONES_ARTICLES.find(function (x) { return x[0].test(lib); });
     return t ? t[1] : cat(catCode).ico || 'package';
   };
@@ -1254,9 +1270,34 @@
     'Nouvelle Acquisition': ['sparkles', 'Équipement supplémentaire ou pour un nouveau poste'],
     'Remplacement Équipement Défectueux': ['wrench', 'L\'équipement actuel est en panne ou défectueux'],
     'Renouvellement': ['refresh-cw', 'L\'équipement actuel est ancien ou usé'],
+    'Création de poste': ['user-plus', 'Nouveau poste dans l\'organisation'],
+    'Remplacement (départ)': ['user-minus', 'Remplacer une personne qui part'],
+    "Renforcement d'effectif": ['users', 'Poste existant, effectif à renforcer'],
+    'Stage': ['graduation-cap', 'Stagiaire'],
+    'Prestataire / consultant': ['briefcase', 'Ressource externe'],
+    'Intérim': ['clock', 'Besoin temporaire'],
+  };
+  const ajoutRh = function (l) { return estRh(l) && l.type_besoin === C.RH_REMPLACEMENT; };
+  const manquesRh = function (l) {
+    const m = [];
+    const vide = function (k) { return !String(l[k] || '').trim(); };
+    if (vide('libelle')) m.push('le poste');
+    if (!(Number(l.quantite) > 0)) m.push('le nombre de postes');
+    if (!l.type_besoin) m.push('la nature');
+    if (ajoutRh(l) && vide('poste_remplace')) m.push('le poste remplacé');
+    if (!l.contrat) m.push('le contrat');
+    if (vide('profil')) m.push('le profil');
+    if (vide('missions')) m.push('les missions');
+    if (vide('rattachement')) m.push('le rattachement');
+    if (!l.periode_entree) m.push("la période d'entrée");
+    if (vide('motif')) m.push('la justification');
+    if (vide('consequence')) m.push('la conséquence');
+    if (!l.priorite) m.push('la priorité');
+    return m;
   };
   const avecEquipement = function (l) { return C.TYPES_EQUIPEMENT_ACTUEL.indexOf(l.type_besoin) >= 0; };
   const manques = function (l) {
+    if (estRh(l)) return manquesRh(l);
     const m = [];
     if (!String(l.libelle || '').trim()) m.push("l'article");
     if (!(Number(l.quantite) > 0)) m.push('la quantité');
@@ -1269,6 +1310,7 @@
     if (!String(l.motif || '').trim()) m.push('le motif');
     return m;
   };
+  const CHAMPS_RH_VIDES = { contrat: '', poste_remplace: '', profil: '', missions: '', rattachement: '', periode_entree: '', consequence: '', priorite: '' };
   const nouvelUid = function () { return Date.now().toString(36) + Math.random().toString(36).slice(2, 6); };
 
   function initNouveau() {
@@ -1326,7 +1368,8 @@
       const k = l.categorie + '|' + l.libelle;
       dans[k] = (dans[k] || 0) + (Number(l.quantite) || 0);
     });
-    $('#nvCats').innerHTML = CATS.map(function (c) {
+    if (!catsSaisie().some(function (c) { return c.code === NV.cat; })) NV.cat = CATS[0].code;
+    $('#nvCats').innerHTML = catsSaisie().map(function (c) {
       const n = S.panier.filter(function (l) { return l.categorie === c.code; }).length;
       return '<button type="button" role="tab" aria-selected="' + (!NV.q && NV.cat === c.code) + '" class="seg-b' + (!NV.q && NV.cat === c.code ? ' on' : '') + '" data-cat="' + c.code + '" style="--c:' + c.couleur + '">' +
         ico(c.ico) + esc(c.libelle) + (n ? '<i>' + n + '</i>' : '') + '</button>';
@@ -1354,8 +1397,8 @@
     };
     const autres = (q ? [] : [cat(NV.cat)]).map(function (c) {
       return '<button type="button" class="tile tile-o" data-cat="' + c.code + '" data-art="' + AUTRE + '" style="--c:' + c.couleur + '">' +
-        '<span class="tile-ic">' + ico('pencil-line') + '</span><span class="tile-n">Autre article</span>' +
-        '<span class="tile-a">' + ico('plus') + 'Préciser</span></button>';
+        '<span class="tile-ic">' + ico(c.rh ? 'user-plus' : 'pencil-line') + '</span><span class="tile-n">' + (c.rh ? 'Poste à pourvoir' : 'Autre article') + '</span>' +
+        '<span class="tile-a">' + ico('plus') + (c.rh ? 'Décrire le poste' : 'Préciser') + '</span></button>';
     });
     $('#nvTiles').innerHTML = tuiles.length || autres.length
       ? tuiles.map(tuile).join('') + autres.join('')
@@ -1430,6 +1473,9 @@
       } else if (act === 'etat') {
         l.etat_actuel = el.dataset.v;
         rendreFiche();
+      } else if (act === 'champ') {
+        l[el.dataset.k] = el.dataset.v;
+        rendreFiche();
       } else if (act === 'motif') {
         const m = el.dataset.v;
         l.motif = String(l.motif || '').trim() ? String(l.motif).trim() + ' — ' + m : m;
@@ -1444,7 +1490,7 @@
       if (!f || !AS.l) return;
       AS.l[f] = f === 'quantite' ? Math.max(1, parseInt(e.target.value, 10) || 1) : e.target.value;
       e.target.classList.remove('err');
-      if (f === 'libelle') $('#asT').textContent = e.target.value.trim() || 'Autre article';
+      if (f === 'libelle') $('#asT').textContent = e.target.value.trim() || (estRh(AS.l) ? 'Poste à pourvoir' : 'Autre article');
       majPiedFiche();
     });
     box.addEventListener('change', function (e) {
@@ -1455,12 +1501,12 @@
   function ouvrirFiche(ligne, nouveau) {
     AS.uid = ligne ? ligne.uid : null;
     AS.essai = !!(ligne && manques(ligne).length);
-    AS.l = Object.assign({ quantite: 1, type_besoin: '', caracteristiques: '', motif: '', annee_acquisition: '', etat_actuel: '', libelle: '', autre: false }, ligne || nouveau);
+    AS.l = Object.assign({ quantite: 1, type_besoin: '', caracteristiques: '', motif: '', annee_acquisition: '', etat_actuel: '', libelle: '', autre: false }, CHAMPS_RH_VIDES, ligne || nouveau);
     const c = cat(AS.l.categorie);
     $('#as').style.setProperty('--c', c.couleur);
-    $('#asIc').innerHTML = ico(AS.l.autre ? 'pencil-line' : icoArticle(AS.l.libelle, AS.l.categorie));
+    $('#asIc').innerHTML = ico(AS.l.autre && !c.rh ? 'pencil-line' : icoArticle(AS.l.libelle, AS.l.categorie));
     $('#asC').textContent = c.libelle;
-    $('#asT').textContent = AS.l.libelle || 'Autre article';
+    $('#asT').textContent = AS.l.libelle || (c.rh ? 'Poste à pourvoir' : 'Autre article');
     $('#asDel').hidden = !ligne;
     $('#asOk').innerHTML = ligne ? ico('check') + 'Enregistrer' : ico('plus') + 'Ajouter à ma demande';
     rendreFiche();
@@ -1490,6 +1536,7 @@
     const m = AS.essai ? manques(l) : [];
     const err = function (k) { return m.indexOf(k) >= 0 ? ' err' : ''; };
     const an = new Date().getFullYear();
+    if (estRh(l)) { $('#asB').innerHTML = ficheRh(l, err); majPiedFiche(); icones(); return; }
     $('#asB').innerHTML =
       (l.autre ? '<label class="fl" for="asLib">Article demandé</label><input class="in' + err("l'article") + '" id="asLib" data-f="libelle" value="' + esc(l.libelle) + '" placeholder="Précisez l\'article (marque, modèle…)" maxlength="120">' : '') +
       '<label class="fl" for="asQte">Quantité</label>' +
@@ -1515,6 +1562,39 @@
     icones();
   }
 
+  // Fiche d'une demande de personnel : mêmes rubriques que la fiche besoins RH 2027.
+  function ficheRh(l, err) {
+    const pills = function (k, liste, label) {
+      return '<div class="pills' + err(label) + '">' + liste.map(function (x) {
+        return '<button type="button" class="pill' + (l[k] === x ? ' on' : '') + '" data-act="champ" data-k="' + k + '" data-v="' + esc(x) + '">' + esc(x) + '</button>';
+      }).join('') + '</div>';
+    };
+    const zone = function (k, label, titre, aide, max, rows) {
+      return '<label class="fl" for="asRh_' + k + '">' + titre + '</label>' +
+        (rows ? '<textarea class="in' + err(label) + '" id="asRh_' + k + '" data-f="' + k + '" rows="' + rows + '" maxlength="' + max + '" placeholder="' + esc(aide) + '">' + esc(l[k]) + '</textarea>'
+          : '<input class="in' + err(label) + '" id="asRh_' + k + '" data-f="' + k + '" value="' + esc(l[k]) + '" maxlength="' + max + '" placeholder="' + esc(aide) + '">');
+    };
+    return zone('libelle', 'le poste', 'Poste / fonction demandé', 'Ex. : Chargé de rapprochement bancaire', 120) +
+      '<label class="fl" for="asQte">Nombre de postes</label>' +
+      '<div class="as-qr"><div class="qty"><button type="button" data-act="moins" aria-label="Diminuer le nombre de postes">−</button>' +
+        '<input id="asQte" data-f="quantite" type="number" min="1" inputmode="numeric" value="' + esc(l.quantite) + '">' +
+        '<button type="button" data-act="plus" aria-label="Augmenter le nombre de postes">+</button></div><span class="qty-h">poste(s) demandé(s)</span></div>' +
+      '<label class="fl">Nature du besoin</label>' +
+      '<div class="opt' + err('la nature') + '" role="radiogroup">' + typesDe(l.categorie).map(function (t) {
+        const a = AIDE_TYPES[t] || ['circle-dot', ''];
+        return '<button type="button" role="radio" aria-checked="' + (l.type_besoin === t) + '" class="' + (l.type_besoin === t ? 'on' : '') + '" data-act="type" data-v="' + esc(t) + '"><b>' + ico(a[0]) + esc(t) + '</b>' + (a[1] ? '<small>' + esc(a[1]) + '</small>' : '') + '</button>';
+      }).join('') + '</div>' +
+      (ajoutRh(l) ? '<div class="eq"><p class="eq-t">' + ico('user-minus') + 'Remplacement</p>' + zone('poste_remplace', 'le poste remplacé', 'Poste ou personne remplacé(e)', 'Ex. : Comptable — départ de M. X en mars 2027', 200) + '</div>' : '') +
+      '<label class="fl">Type de contrat</label>' + pills('contrat', C.RH_CONTRATS, 'le contrat') +
+      zone('profil', 'le profil', 'Profil recherché <small>(diplôme, expérience)</small>', "Ex. : Bac+3 comptabilité-finance, 2 ans d'expérience", 500, 2) +
+      zone('missions', 'les missions', 'Missions principales', "Ex. : rapprochements bancaires mensuels, suivi des comptes d'attente", 1000, 3) +
+      zone('rattachement', 'le rattachement', 'Rattachement (N+1)', 'Ex. : Chef trésorerie', 120) +
+      '<label class="fl">Période d\'entrée souhaitée</label>' + pills('periode_entree', C.RH_PERIODES, "la période d'entrée") +
+      zone('motif', 'la justification', 'Justification du besoin <small>— l\'élément clé pour la validation</small>', 'Ex. : volume de comptes en hausse ; rapprochements en retard', 1000, 3) +
+      zone('consequence', 'la conséquence', 'Conséquence si le poste n\'est pas pourvu', "Ex. : retard des arrêtés mensuels, risque d'erreurs", 1000, 2) +
+      '<label class="fl">Priorité</label>' + pills('priorite', C.RH_PRIORITES, 'la priorité');
+  }
+
   function majPiedFiche() {
     const m = manques(AS.l);
     $('#asM').className = 'as-m' + (m.length ? '' : ' ok');
@@ -1533,10 +1613,12 @@
       return;
     }
     if (!avecEquipement(l)) { l.annee_acquisition = ''; l.etat_actuel = ''; }
+    if (!ajoutRh(l)) l.poste_remplace = '';
     const propre = {
       categorie: l.categorie, libelle: l.libelle, autre: !!l.autre, quantite: parseInt(l.quantite, 10) || 1, type_besoin: l.type_besoin,
       caracteristiques: l.caracteristiques || '', motif: l.motif, annee_acquisition: l.annee_acquisition, etat_actuel: l.etat_actuel,
     };
+    if (estRh(l)) Object.keys(CHAMPS_RH_VIDES).forEach(function (k) { propre[k] = String(l[k] || '').trim(); });
     const existante = AS.uid && S.panier.find(function (x) { return x.uid === AS.uid; });
     let uid;
     if (existante) { Object.assign(existante, propre); uid = existante.uid; } else { uid = nouvelUid(); S.panier.push(Object.assign({ uid: uid }, propre)); }
@@ -1630,11 +1712,13 @@
     chargement(true);
     try {
       const items = S.panier.map(function (l) {
-        return {
+        const item = {
           categorie: l.categorie, type_besoin: l.type_besoin, libelle: String(l.libelle).trim(), quantite: parseInt(l.quantite, 10),
           caracteristiques: String(l.caracteristiques || '').trim(), motif: String(l.motif).trim(),
           annee_acquisition: avecEquipement(l) ? parseInt(l.annee_acquisition, 10) : '', etat_actuel: avecEquipement(l) ? l.etat_actuel : '',
         };
+        if (estRh(l)) Object.keys(CHAMPS_RH_VIDES).forEach(function (k) { item[k] = String(l[k] || '').trim(); });
+        return item;
       });
       const r = await Store.create(S.session, { items: items });
       S.panier = [];
@@ -1770,7 +1854,7 @@
 
   function ligneSuivi(b) {
     const c = cat(b.categorie);
-    const details = [esc(b.type_besoin), equipTxt(b) ? esc(equipTxt(b)) : '', b.caracteristiques ? esc(b.caracteristiques) : ''].filter(Boolean).join(' · ');
+    const details = [esc(b.type_besoin), equipTxt(b) ? esc(equipTxt(b)) : '', b.caracteristiques ? esc(b.caracteristiques) : '', esc(rhTxt(b))].filter(Boolean).join(' · ');
     const reduit = b.statut === 'VALIDE' && Number(b.quantite_validee) < Number(b.quantite);
     return '<button type="button" class="gr" data-id="' + esc(b.id) + '" style="--c:' + c.couleur + '">' +
       '<span class="dl-ic">' + ico(icoArticle(b.libelle, b.categorie)) + '</span>' +
@@ -1897,7 +1981,8 @@
 
   function ligneValidation(b) {
     const c = cat(b.categorie);
-    const details = [esc(c.libelle), esc(b.type_besoin), equipTxt(b) ? '<b class="eqb">' + esc(equipTxt(b)) + '</b>' : '', b.caracteristiques ? esc(b.caracteristiques) : ''].filter(Boolean).join(' · ');
+    const details = [esc(c.libelle), esc(b.type_besoin), equipTxt(b) ? '<b class="eqb">' + esc(equipTxt(b)) + '</b>' : '', b.caracteristiques ? esc(b.caracteristiques) : '',
+      rhTxt(b) ? '<b class="eqb">' + esc(rhTxt(b)) + '</b>' : '', b.poste_remplace ? 'remplace : ' + esc(b.poste_remplace) : ''].filter(Boolean).join(' · ');
     return '<div class="vr" data-id="' + esc(b.id) + '" style="--c:' + c.couleur + '">' +
       '<span class="dl-ic">' + ico(icoArticle(b.libelle, b.categorie)) + '</span>' +
       '<div class="vr-a"><b>' + esc(b.libelle) + '</b><small>' + details + '</small><p class="vr-m">' + ico('quote') + esc(b.motif) + '</p></div>' +
@@ -1937,6 +2022,20 @@
         'Commentaire du valideur': b.commentaire_bo, 'Validé par': b.traite_par, 'Poste du valideur': b.traite_par_poste, 'Validé le': fDateHeure(b.maj_le),
       };
     }), [14, 11, 16, 18, 20, 18, 13, 22, 30, 10, 30, 16, 22, 40, 11, 10, 30, 18, 16, 16]), 'Besoins validés');
+
+    // Demandes de personnel validées : présentation de la fiche besoins RH 2027.
+    const rh = lignes.filter(estRh);
+    if (rh.length) {
+      XLSX.utils.book_append_sheet(wb, feuille(rh.map(function (b) {
+        return {
+          'N°': b.id, 'Demandeur': b.demandeur, 'Poste / fonction demandé': b.libelle, 'Nature du besoin': b.type_besoin,
+          'Nombre de postes': Number(b.quantite) || 0, 'Nombre de postes validé': Number(b.quantite_validee) || 0, 'Type de contrat': b.contrat,
+          'Poste remplacé (si remplacement)': b.poste_remplace, 'Profil recherché (diplôme, expérience)': b.profil, 'Missions principales': b.missions,
+          'Rattachement (N+1)': b.rattachement, "Période d'entrée souhaitée": b.periode_entree, 'Justification du besoin': b.motif,
+          "Conséquence si le poste n'est pas pourvu": b.consequence, 'Priorité': b.priorite, 'Validé par': b.traite_par, 'Commentaire du valideur': b.commentaire_bo,
+        };
+      }), [14, 18, 28, 20, 10, 10, 12, 26, 32, 40, 18, 12, 40, 36, 10, 18, 30]), 'Besoins RH validés');
+    }
 
     const m = {};
     lignes.filter(function (b) { return b.statut !== 'REJETE'; }).forEach(function (b) {

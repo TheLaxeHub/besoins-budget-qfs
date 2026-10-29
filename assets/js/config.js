@@ -99,7 +99,24 @@ window.APP_CONFIG = {
         'Téléphone Android',
       ],
     },
+    {
+      // Demandes de personnel (fiche « Recensement des besoins en ressources humaines — Budget 2027 »),
+      // réservées aux personnes de DEMANDEURS_PERSONNEL. Pas de catalogue : le poste est saisi librement.
+      code: 'PERSONNEL', libelle: 'Personnel', ico: 'users', couleur: '#be185d', rh: true,
+      aide: 'Création de poste, remplacement, renfort, stage, intérim…',
+      types: ['Création de poste', 'Remplacement (départ)', "Renforcement d'effectif", 'Stage', 'Prestataire / consultant', 'Intérim'],
+      articles: [],
+    },
   ],
+
+  // Personnes du siège autorisées à faire des demandes de personnel (catégorie PERSONNEL).
+  // À garder identique à DEMANDEURS_PERSONNEL dans apps-script/Code.gs.
+  DEMANDEURS_PERSONNEL: ['Yaya Comara', 'Zeinab Kone', 'Rita Kessie', 'Issa Kone', 'Jansenus Koffi', 'Axel Kouamenan'],
+  // Listes de la fiche RH (à garder identiques à Code.gs). Pour un remplacement, le poste remplacé est obligatoire.
+  RH_REMPLACEMENT: 'Remplacement (départ)',
+  RH_CONTRATS: ['CDI', 'CDD', 'Stage', 'Prestation', 'Intérim'],
+  RH_PERIODES: ['T1 2027', 'T2 2027', 'T3 2027', 'T4 2027'],
+  RH_PRIORITES: ['Haute', 'Moyenne', 'Basse'],
 
   // Motifs proposés en un clic (le site peut toujours écrire son propre motif).
   MOTIFS_RAPIDES: [

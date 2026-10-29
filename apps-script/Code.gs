@@ -81,7 +81,16 @@ const OTP_DELAI_RENVOI_S = 30;
 const SESSION_SECONDES = 6 * 3600; // maximum autorisé par CacheService
 
 // À garder identique aux codes de CATEGORIES dans assets/js/config.js.
-const CATEGORIES = ['INFORMATIQUE', 'MOBILIER', 'ACHATS'];
+const CATEGORIES = ['INFORMATIQUE', 'MOBILIER', 'ACHATS', 'PERSONNEL'];
+
+// Demandes de personnel (catégorie PERSONNEL, fiche besoins RH 2027) : réservées à ces personnes du siège
+// (à garder identique à DEMANDEURS_PERSONNEL et aux listes RH_* dans assets/js/config.js).
+const DEMANDEURS_PERSONNEL = ['Yaya Comara', 'Zeinab Kone', 'Rita Kessie', 'Issa Kone', 'Jansenus Koffi', 'Axel Kouamenan'];
+const RH_NATURES = ['Création de poste', 'Remplacement (départ)', "Renforcement d'effectif", 'Stage', 'Prestataire / consultant', 'Intérim'];
+const RH_REMPLACEMENT = 'Remplacement (départ)';
+const RH_CONTRATS = ['CDI', 'CDD', 'Stage', 'Prestation', 'Intérim'];
+const RH_PERIODES = ['T1 2027', 'T2 2027', 'T3 2027', 'T4 2027'];
+const RH_PRIORITES = ['Haute', 'Moyenne', 'Basse'];
 const STATUTS = ['EN_ATTENTE', 'VALIDE', 'REJETE'];
 
 const COLS = [
@@ -89,6 +98,8 @@ const COLS = [
   'caracteristiques', 'service', 'personne', 'motif', 'commentaires', 'statut', 'quantite_validee',
   'commentaire_bo', 'traite_par', 'maj_le', 'poste', 'demandeur_id', 'traite_par_poste', 'traite_par_id',
   'annee_acquisition', 'etat_actuel',
+  // Demandes de personnel : libelle = poste demandé, type_besoin = nature, quantite = nombre de postes, motif = justification.
+  'contrat', 'poste_remplace', 'profil', 'missions', 'rattachement', 'periode_entree', 'consequence', 'priorite',
 ];
 const NUMERIQUES = ['quantite', 'quantite_validee', 'annee_acquisition'];
 
@@ -318,6 +329,9 @@ function lister_(s) {
 
 function creer_(s, data) {
   const items = (data.items || []).map(valider_);
+  if (items.some(function (it) { return it.categorie === 'PERSONNEL'; }) && !(s.id && DEMANDEURS_PERSONNEL.indexOf(s.nom) >= 0)) {
+    throw erreur_('INTERDIT', "Vous n'êtes pas autorisé(e) à faire des demandes de personnel.");
+  }
   if (!items.length) throw erreur_('VALIDATION', 'Aucun besoin à enregistrer.');
   if (items.length > 100) throw erreur_('VALIDATION', 'Maximum 100 lignes par envoi.');
 
@@ -407,6 +421,7 @@ function valider_(d, k) {
   };
   const l = 'Ligne ' + (k + 1) + ' : ';
   if (CATEGORIES.indexOf(it.categorie) < 0) throw erreur_('VALIDATION', l + 'catégorie invalide.');
+  if (it.categorie === 'PERSONNEL') return validerRh_(d, it, l);
   if (!it.type_besoin) throw erreur_('VALIDATION', l + 'type de besoin manquant.');
   if (!it.libelle) throw erreur_('VALIDATION', l + 'libellé manquant.');
   if (!(it.quantite > 0)) throw erreur_('VALIDATION', l + 'la quantité doit être supérieure à 0.');
@@ -418,6 +433,33 @@ function valider_(d, k) {
     it.annee_acquisition = annee;
     it.etat_actuel = String(d.etat_actuel);
   }
+  return it;
+}
+
+/** Demande de personnel : champs de la fiche besoins RH 2027 (tous obligatoires, sauf le poste remplacé hors remplacement). */
+function validerRh_(d, it, l) {
+  it.caracteristiques = '';
+  it.contrat = String(d.contrat || '');
+  it.poste_remplace = texte_(d.poste_remplace, 200);
+  it.profil = texte_(d.profil, 500);
+  it.missions = texte_(d.missions, 1000);
+  it.rattachement = texte_(d.rattachement, 120);
+  it.periode_entree = String(d.periode_entree || '');
+  it.consequence = texte_(d.consequence, 1000);
+  it.priorite = String(d.priorite || '');
+  if (!it.libelle) throw erreur_('VALIDATION', l + 'poste / fonction demandé manquant.');
+  if (RH_NATURES.indexOf(it.type_besoin) < 0) throw erreur_('VALIDATION', l + 'nature du besoin invalide.');
+  if (!(it.quantite > 0)) throw erreur_('VALIDATION', l + 'le nombre de postes doit être supérieur à 0.');
+  if (RH_CONTRATS.indexOf(it.contrat) < 0) throw erreur_('VALIDATION', l + 'type de contrat manquant.');
+  if (it.type_besoin === RH_REMPLACEMENT && !it.poste_remplace) throw erreur_('VALIDATION', l + 'poste ou personne remplacé(e) manquant.');
+  if (it.type_besoin !== RH_REMPLACEMENT) it.poste_remplace = '';
+  if (!it.profil) throw erreur_('VALIDATION', l + 'profil recherché manquant.');
+  if (!it.missions) throw erreur_('VALIDATION', l + 'missions principales manquantes.');
+  if (!it.rattachement) throw erreur_('VALIDATION', l + 'rattachement (N+1) manquant.');
+  if (RH_PERIODES.indexOf(it.periode_entree) < 0) throw erreur_('VALIDATION', l + "période d'entrée souhaitée manquante.");
+  if (!it.motif) throw erreur_('VALIDATION', l + 'justification du besoin manquante.');
+  if (!it.consequence) throw erreur_('VALIDATION', l + "conséquence si le poste n'est pas pourvu manquante.");
+  if (RH_PRIORITES.indexOf(it.priorite) < 0) throw erreur_('VALIDATION', l + 'priorité manquante.');
   return it;
 }
 
@@ -449,6 +491,11 @@ function onglet_(ss, nom, cols) {
       const i = cols.indexOf(c);
       if (i >= 0) sh.getRange(2, i + 1, sh.getMaxRows() - 1, 1).setNumberFormat('0');
     });
+  } else if (sh.getLastColumn() < cols.length) {
+    // Colonnes ajoutées depuis la création de l'onglet (ex. demandes de personnel) : en-têtes complétés.
+    const n = sh.getLastColumn();
+    sh.getRange(1, n + 1, 1, cols.length - n).setValues([cols.slice(n)]).setFontWeight('bold').setBackground('#0D47A1').setFontColor('#FFFFFF');
+    sh.getRange(1, n + 1, sh.getMaxRows(), cols.length - n).setNumberFormat('@');
   }
   return sh;
 }

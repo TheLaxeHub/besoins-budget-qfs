@@ -53,6 +53,9 @@ Chacun arrive directement sur ce qu'il vient faire :
 
 Pour un *Remplacement d'équipement défectueux* ou un *Renouvellement*, l'**année d'acquisition** et l'**état de l'équipement actuel** sont obligatoires (états : Hors service, En panne (réparable), Défectueux / fonctionne mal, Usé / vétuste, Fonctionnel).
 
+### Demandes de personnel
+Une 4ᵉ catégorie, **Personnel**, reprend la fiche *Recensement des besoins en ressources humaines — Budget 2027*. Elle n'est proposée qu'à **Yaya Comara, Zeinab Kone, Rita Kessie, Issa Kone, Jansenus Koffi et Axel Kouamenan** (réglage `DEMANDEURS_PERSONNEL`, `config.js` et `Code.gs` ; le serveur refuse la demande pour toute autre personne). La tuile « Poste à pourvoir » ouvre une fiche avec : poste / fonction, nombre de postes, nature du besoin (Création de poste, Remplacement (départ), Renforcement d'effectif, Stage, Prestataire / consultant, Intérim), poste remplacé (pour un remplacement), type de contrat (CDI, CDD, Stage, Prestation, Intérim), profil recherché, missions principales, rattachement (N+1), période d'entrée souhaitée (T1 à T4 2027), justification, conséquence si le poste n'est pas pourvu et priorité (Haute, Moyenne, Basse). Tout est obligatoire, sauf le poste remplacé hors remplacement. La validation suit les règles habituelles (selon le poste du demandeur), et l'export Excel ajoute un onglet *Besoins RH validés*. Dans la feuille, ces champs occupent les colonnes `contrat` à `priorite` de l'onglet `Besoins`, ajoutées automatiquement.
+
 ### Export Excel (valideurs)
 - **Responsable** : les besoins qu'**il a validés**.
 - **Manager** : les besoins validés par **les responsables et les managers** (dont lui-même).
