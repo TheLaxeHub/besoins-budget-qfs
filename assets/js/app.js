@@ -481,6 +481,9 @@
     $('#nvHello').textContent = 'Bonjour ' + ss.nom;
     $('#mesExport').hidden = !Store.estExporteur(ss);
     $$('[data-export-rh]').forEach(function (b) { b.hidden = !peutRh(); });
+    // Sur « Exprimer un besoin », écran d'accueil des non-valideurs : exports accessibles dès l'arrivée.
+    $$('[data-export-val]').forEach(function (b) { b.hidden = !Store.estExporteur(ss); });
+    $('#nvExp').hidden = bo || (!Store.estExporteur(ss) && !peutRh());
     $('#regTitle').textContent = estManager() ? 'Registre — besoins des responsables et des managers' : 'Registre — besoins validés par ' + ss.nom;
     $('#fVue').value = S.filtres.vue;
     $('#ftText').textContent = 'Quipux Financial Services — ' + C.APP_TITRE + ' · ' + new Date().getFullYear();
