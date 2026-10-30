@@ -69,7 +69,7 @@
   const valideurTxt = function (b) { const v = Store.valideurDe(b); return v === 'Managers' ? 'les managers' : v || 'non désigné'; };
   const monValideur = function () { return valideurTxt({ poste: S.session.poste, demandeur: S.session.nom, demandeur_id: S.session.id }); };
   const equipTxt = function (b) { return b.annee_acquisition || b.etat_actuel ? [b.annee_acquisition ? 'Acquis en ' + b.annee_acquisition : '', b.etat_actuel].filter(Boolean).join(' · ') : ''; };
-  const valideParMoi = function (b) { return !!S.session && b.traite_par_id === S.session.id && !!S.session.id; };
+  const valideParMoi = function (b) { return !!S.session && !!S.session.id && (b.traite_par_id ? b.traite_par_id === S.session.id : String(b.traite_par).trim() === S.session.nom); };
   const cleUser = function () { return (S.session.id || (S.session.site + '_' + S.session.nom)).toLowerCase(); };
   const initiales = function (n) { return String(n).split(/\s+/).filter(Boolean).slice(0, 2).map(function (x) { return x.charAt(0).toUpperCase(); }).join(''); };
   const parId = function (id) { return S.besoins.find(function (b) { return b.id === id; }); };
@@ -2006,9 +2006,13 @@
     if (!estBO() && !exporteur) return;
     // Responsable valideur : les besoins qu'il a lui-même validés.
     // Manager et exportateurs (ex. Rita Kessie) : les besoins validés par les responsables et par les managers.
+    // Valideurs reconnus aussi par leur nom : les lignes validées avant l'ajout de la colonne traite_par_poste l'ont vide.
+    const nomsValideurs = Object.keys(C.VALIDEURS).concat((posteDef('Manager') || {}).personnes || []);
     const lignes = S.besoins.filter(function (b) {
       if (b.statut !== 'VALIDE') return false;
-      return estManager() || (exporteur && !estBO()) ? (b.traite_par_poste === 'Responsable' || b.traite_par_poste === 'Manager') : valideParMoi(b);
+      return estManager() || (exporteur && !estBO())
+        ? (b.traite_par_poste === 'Responsable' || b.traite_par_poste === 'Manager' || nomsValideurs.indexOf(String(b.traite_par).trim()) >= 0)
+        : valideParMoi(b);
     }).sort(function (a, b) { return String(a.site).localeCompare(String(b.site)) || String(a.id).localeCompare(String(b.id)); });
     if (!lignes.length) { toast(estManager() || (exporteur && !estBO()) ? 'Aucun besoin validé par Zeinab Kone, Yaya Comara ou les managers pour le moment.' : 'Vous n\'avez encore validé aucun besoin.', 'err'); return; }
     const feuille = function (rows, largeurs) {
