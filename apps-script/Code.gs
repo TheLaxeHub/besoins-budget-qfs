@@ -51,7 +51,7 @@ const VALIDEURS = {
 };
 const POSTES_MANAGER = ['Responsable', 'Manager'];
 // Personnes du siège qui exportent tous les besoins validés sans les valider (à garder identique à config.js).
-const EXPORTEURS = ['Rita Kessie'];
+const EXPORTEURS = ['Rita Kessie', 'Axel Kouamenan'];
 
 // Types pour lesquels l'année d'acquisition et l'état de l'équipement actuel sont obligatoires.
 const TYPES_EQUIPEMENT_ACTUEL = ['Remplacement Équipement Défectueux', 'Renouvellement'];
