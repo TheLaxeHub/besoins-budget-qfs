@@ -66,7 +66,7 @@
   const estManager = function () { return !!S.session && S.session.poste === 'Manager'; };
   const peutDecider = function (b) { return !!S.session && Store.peutDecider(S.session, b); };
   const estMien = function (b) { return !!S.session && Store.estMien(S.session, b); };
-  const valideurTxt = function (b) { const v = Store.valideurDe(b); return v === 'Managers' ? 'les managers' : v || 'non désigné'; };
+  const valideurTxt = function (b) { if (cat(b.categorie).rh) return 'aucune (demande de personnel)'; const v = Store.valideurDe(b); return v === 'Managers' ? 'les managers' : v || 'non désigné'; };
   const monValideur = function () { return valideurTxt({ poste: S.session.poste, demandeur: S.session.nom, demandeur_id: S.session.id }); };
   const equipTxt = function (b) { return b.annee_acquisition || b.etat_actuel ? [b.annee_acquisition ? 'Acquis en ' + b.annee_acquisition : '', b.etat_actuel].filter(Boolean).join(' · ') : ''; };
   const valideParMoi = function (b) { return !!S.session && !!S.session.id && (b.traite_par_id ? b.traite_par_id === S.session.id : String(b.traite_par).trim() === S.session.nom); };
@@ -81,6 +81,10 @@
   const estRh = function (x) { return !!cat(x.categorie).rh; };
   const peutRh = function () { return !!S.session && !!S.session.id && (C.DEMANDEURS_PERSONNEL || []).indexOf(S.session.nom) >= 0; };
   const catsSaisie = function () { return CATS.filter(function (c) { return !c.rh || peutRh(); }); };
+  // Demande de personnel non traitée : simplement « Enregistrée » (pas de validation).
+  const rhEnregistree = function (b) { return estRh(b) && b.statut === 'EN_ATTENTE'; };
+  const badgeLigne = function (b) { return rhEnregistree(b) ? '<span class="badge" style="background:#fce7f3;color:#9d174d">Enregistrée</span>' : badgeStatut(b.statut); };
+  const libStatut = function (b) { return rhEnregistree(b) ? 'Enregistrée' : (STATUTS[b.statut] || {}).libelle; };
   const rhTxt = function (b) { return estRh(b) ? [b.contrat, b.periode_entree, b.priorite ? 'Priorité ' + String(b.priorite).toLowerCase() : ''].filter(Boolean).join(' · ') : ''; };
 
   const badgeStatut = function (s) {
@@ -923,7 +927,7 @@
         '<td class="ty">' + esc(b.type_besoin) + '</td>' +
         '<td>' + (equipTxt(b) ? esc(equipTxt(b)) : '<span class="z">—</span>') + '</td>' +
         '<td><div class="clip" title="' + esc(b.motif) + '">' + esc(b.motif) + '</div></td>' +
-        '<td>' + badgeStatut(b.statut) + '</td>' +
+        '<td>' + badgeLigne(b) + '</td>' +
         '<td class="num">' + (b.statut === 'VALIDE' ? '<b>' + nombre(b.quantite_validee) + '</b>' : '<span class="z">—</span>') + '</td>' +
         '</tr>';
     }).join('');
@@ -1047,7 +1051,7 @@
     $('#pTitle').textContent = nombre(b.quantite) + ' × ' + b.libelle;
     const rh = estRh(b);
     $('#pBody').innerHTML =
-      '<div class="pst-row">' + badgeStatut(b.statut) + badgeCat(b.categorie) + '<span class="sub">Demande ' + esc(b.ref) + ' · saisie le ' + fDateHeure(b.cree_le) + '</span></div>' +
+      '<div class="pst-row">' + badgeLigne(b) + badgeCat(b.categorie) + '<span class="sub">Demande ' + esc(b.ref) + ' · saisie le ' + fDateHeure(b.cree_le) + '</span></div>' +
       (rh ? '<div class="ps"><h3 class="pst">Le poste demandé</h3><div class="pg">' +
         it('Poste / fonction', esc(b.libelle)) + it('Nombre de postes', '<b>' + nombre(b.quantite) + '</b>') +
         it('Nature du besoin', esc(b.type_besoin)) + it('Type de contrat', esc(b.contrat)) +
@@ -1055,7 +1059,7 @@
         it('Rattachement (N+1)', esc(b.rattachement)) + it("Période d'entrée souhaitée", esc(b.periode_entree)) +
         it('Priorité', esc(b.priorite)) + it('Demandeur', esc(b.demandeur) + ' <span class="z">(' + esc(b.poste) + ')</span>') +
         it('Profil recherché', esc(b.profil), true) + it('Missions principales', esc(b.missions), true) +
-        it("Conséquence si le poste n'est pas pourvu", esc(b.consequence), true) + it('Validation par', esc(valideurTxt(b))) +
+        it("Conséquence si le poste n'est pas pourvu", esc(b.consequence), true) + it('Validation', 'Aucune — demande enregistrée') +
       '</div><p class="pil" style="margin:12px 0 6px">Justification du besoin</p><div class="ptx">' + esc(b.motif) + '</div></div>' :
       '<div class="ps"><h3 class="pst">Le besoin</h3><div class="pg">' +
         it('Article', esc(b.libelle)) + it('Quantité demandée', '<b>' + nombre(b.quantite) + '</b>') +
@@ -1078,6 +1082,12 @@
     if (peutDecider(b)) {
       $('#pForm').innerHTML = formDecision(b.statut === 'EN_ATTENTE' ? 'VALIDE' : b.statut, b.quantite_validee !== '' ? b.quantite_validee : b.quantite, b.commentaire_bo, true);
       brancherDecision([b.id]);
+    } else if (rhEnregistree(b) && estMien(b)) {
+      $('#pForm').innerHTML = '<div class="ps"><h3 class="pst">Modifier</h3><p class="cs" style="margin-bottom:12px">Les demandes de personnel sont enregistrées sans validation. Vous pouvez la retirer puis la ressaisir si nécessaire.</p>' +
+        '<button type="button" class="btn btn-danger" id="pRetirer">' + ico('trash-2') + 'Retirer cette demande</button></div>';
+      $('#pRetirer').addEventListener('click', function () { retirer(b); });
+    } else if (rhEnregistree(b)) {
+      $('#pForm').innerHTML = '<div class="ps"><p class="cs">Demande de personnel enregistrée (pas de validation).</p></div>';
     } else if (b.statut === 'EN_ATTENTE' && estMien(b)) {
       $('#pForm').innerHTML = '<div class="ps"><h3 class="pst">Modifier</h3><p class="cs" style="margin-bottom:6px">Validation par ' + esc(valideurTxt(b)) + '.</p><p class="cs" style="margin-bottom:12px">Ce besoin n\'a pas encore été examiné : vous pouvez le retirer puis le ressaisir si nécessaire.</p>' +
         '<button type="button" class="btn btn-danger" id="pRetirer">' + ico('trash-2') + 'Retirer ce besoin</button></div>';
@@ -1653,7 +1663,7 @@
   }
 
   function rendreDemande() {
-    $('#demWho').innerHTML = ico('user-round') + '<span>Au nom de <b>' + esc(S.session.nom) + '</b> · ' + esc(S.session.poste) + ' · ' + esc(S.session.site) + '<br>Validation par <b>' + esc(monValideur()) + '</b></span>';
+    $('#demWho').innerHTML = ico('user-round') + '<span>Au nom de <b>' + esc(S.session.nom) + '</b> · ' + esc(S.session.poste) + ' · ' + esc(S.session.site) + '<br>Validation par <b>' + esc(monValideur()) + '</b>' + (peutRh() ? ' · demandes de personnel enregistrées sans validation' : '') + '</span>';
     $('#demLignes').innerHTML = S.panier.length
       ? S.panier.map(htmlLigne).join('')
       : '<div class="dem-vide"><div class="dem-vide-ic">' + ico('mouse-pointer-click') + '</div><b>Votre demande est vide</b><span>Touchez un article du catalogue pour l\'ajouter.</span>' +
@@ -1706,9 +1716,15 @@
     if (!S.panier.length) return;
     const v = monValideur();
     const n = S.panier.length;
+    const nRh = S.panier.filter(estRh).length;
+    const aValider = n - nRh;
+    const destination = function () {
+      return [aValider ? aValider + ' transmis à <b>' + esc(v) + '</b> pour validation' : '',
+        nRh ? nRh + ' demande' + (nRh > 1 ? 's' : '') + ' de personnel enregistrée' + (nRh > 1 ? 's' : '') + ' sans validation' : ''].filter(Boolean).join(', ');
+    };
     const ok = await confirmer({
       ton: 'info', ico: 'send', titre: 'Envoyer votre demande ?',
-      texte: '<b>' + n + ' besoin' + (n > 1 ? 's' : '') + '</b> (' + nombre(somme(S.panier, function (l) { return l.quantite; })) + ' unité(s)) seront transmis à <b>' + esc(v) + '</b> pour validation.',
+      texte: '<b>' + n + ' besoin' + (n > 1 ? 's' : '') + '</b> (' + nombre(somme(S.panier, function (l) { return l.quantite; })) + ' unité(s)) : ' + destination() + '.',
       extra: recapHtml(S.panier), ok: 'Envoyer ma demande', okIco: 'send', annuler: 'Revoir',
     });
     if (!ok) return;
@@ -1733,7 +1749,7 @@
       actualiser(true);
       const suivre = await confirmer({
         ton: 'success', ico: 'check', titre: 'Demande envoyée !',
-        texte: items.length + ' besoin' + (items.length > 1 ? 's' : '') + ' transmis à <b>' + esc(v) + '</b>. Vous suivrez la décision dans « ' + esc($('#sbMes').textContent) + ' ».',
+        texte: items.length + ' besoin' + (items.length > 1 ? 's' : '') + ' : ' + destination() + '. Vous les retrouverez dans « ' + esc($('#sbMes').textContent) + ' ».',
         extra: '<div class="cf-ref"><small>Référence de la demande</small><b>' + esc(r.ref) + '</b><span>À indiquer au valideur en cas de question.</span></div>',
         ok: 'Suivre mes besoins', okIco: 'list-checks', annuler: 'Nouvelle demande', annulerIco: 'plus',
       });
@@ -1790,7 +1806,9 @@
   };
 
   // État global d'une demande, d'après ses lignes.
-  function etatDemande(g) {
+  function etatDemande(tout) {
+    const g = tout.filter(function (b) { return !rhEnregistree(b); });
+    if (!g.length) return { cls: 'ok', ico: 'circle-check', txt: 'Enregistrée' };
     const n = g.length;
     const v = g.filter(function (b) { return b.statut === 'VALIDE'; }).length;
     const r = g.filter(function (b) { return b.statut === 'REJETE'; }).length;
@@ -1822,7 +1840,7 @@
       '<div class="mes-prog">' +
         '<div class="ring" style="background:conic-gradient(#047857 0 ' + pv + '%,#be123c ' + pv + '% ' + (pv + pr) + '%,#eef2f6 ' + (pv + pr) + '% 100%)"><span><b>' + st.taux + '%</b><small>examinés</small></span></div>' +
         '<div class="mes-prog-t"><b>' + nombre(nbDem) + ' demande(s) envoyée(s)</b><small>' + nombre(st.n) + ' article(s) · ' + nombre(st.qte) + ' unité(s) demandée(s)</small>' +
-          (st.EN_ATTENTE ? '<small class="att">' + ico('hourglass') + nombre(st.EN_ATTENTE) + ' en attente de ' + esc(monValideur()) + '</small>' : st.n ? '<small class="fini">' + ico('circle-check') + 'Tout a été examiné</small>' : '') + '</div>' +
+          (st.EN_ATTENTE - toutes.filter(rhEnregistree).length ? '<small class="att">' + ico('hourglass') + nombre(st.EN_ATTENTE - toutes.filter(rhEnregistree).length) + ' en attente de ' + esc(monValideur()) + '</small>' : st.n ? '<small class="fini">' + ico('circle-check') + 'Tout a été examiné</small>' : '') + '</div>' +
       '</div>' +
       '<div class="mes-kpis" role="group" aria-label="Filtrer par statut">' +
         filtre('', 'Tous', st.n, 'article(s)', '#0f172a') +
@@ -1869,7 +1887,7 @@
         '<span class="gr-q"><small>Demandé</small><b>' + nombre(b.quantite) + '</b></span>' +
         '<span class="gr-q' + (b.statut === 'VALIDE' ? ' v' : '') + (reduit ? ' r' : '') + '"><small>Validé</small><b>' + (b.statut === 'VALIDE' ? nombre(b.quantite_validee) : '—') + '</b></span>' +
       '</span>' +
-      '<span class="gr-s">' + badgeStatut(b.statut) + (b.traite_par ? '<small>par ' + esc(b.traite_par) + '</small>' : '') + '</span>' +
+      '<span class="gr-s">' + badgeLigne(b) + (b.traite_par ? '<small>par ' + esc(b.traite_par) + '</small>' : '') + '</span>' +
     '</button>';
   }
 
@@ -2087,11 +2105,10 @@
         'Poste remplacé (si remplacement)': b.poste_remplace, 'Profil recherché (diplôme, expérience)': b.profil, 'Missions principales': b.missions,
         'Rattachement (N+1)': b.rattachement, "Période d'entrée souhaitée": b.periode_entree, 'Justification du besoin': b.motif,
         "Conséquence si le poste n'est pas pourvu": b.consequence, 'Priorité': b.priorite,
-        'Statut': (STATUTS[b.statut] || {}).libelle, 'Nombre de postes validé': b.statut === 'VALIDE' ? Number(b.quantite_validee) || 0 : '',
-        'Validation par': valideurTxt(b), 'Décision de': b.traite_par, 'Décision le': b.statut === 'EN_ATTENTE' ? '' : fDateHeure(b.maj_le), 'Commentaire du valideur': b.commentaire_bo,
+        'Statut': libStatut(b),
       };
     }));
-    ws['!cols'] = [14, 11, 16, 18, 14, 28, 20, 10, 12, 26, 32, 40, 18, 12, 40, 36, 10, 11, 10, 18, 18, 16, 30].map(function (w) { return { wch: w }; });
+    ws['!cols'] = [14, 11, 16, 18, 14, 28, 20, 10, 12, 26, 32, 40, 18, 12, 40, 36, 10, 12].map(function (w) { return { wch: w }; });
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Demandes de personnel');
     XLSX.writeFile(wb, 'Demandes_personnel_' + C.CAMPAGNE.replace(/\s+/g, '_') + '_' + fDate(new Date()).replace(/\//g, '-') + '.xlsx');

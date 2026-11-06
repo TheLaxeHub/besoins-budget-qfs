@@ -111,7 +111,7 @@ window.APP_CONFIG = {
 
   // Personnes du siège autorisées à faire des demandes de personnel (catégorie PERSONNEL).
   // À garder identique à DEMANDEURS_PERSONNEL dans apps-script/Code.gs.
-  DEMANDEURS_PERSONNEL: ['Yaya Comara', 'Zeinab Kone', 'Rita Kessie', 'Issa Kone', 'Jansenus Koffi', 'Axel Kouamenan'],
+  DEMANDEURS_PERSONNEL: ['Yaya Comara', 'Zeinab Kone', 'Rita Kessie', 'Issa Kone', 'Jansenus Koffi', 'Axel Kouamenan', 'Kader Soro'],
   // Listes de la fiche RH (à garder identiques à Code.gs). Pour un remplacement, le poste remplacé est obligatoire.
   RH_REMPLACEMENT: 'Remplacement (départ)',
   RH_CONTRATS: ['CDI', 'CDD', 'Stage', 'Prestation', 'Intérim'],

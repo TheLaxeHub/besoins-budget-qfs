@@ -85,7 +85,7 @@ const CATEGORIES = ['INFORMATIQUE', 'MOBILIER', 'ACHATS', 'PERSONNEL'];
 
 // Demandes de personnel (catégorie PERSONNEL, fiche besoins RH 2027) : réservées à ces personnes du siège
 // (à garder identique à DEMANDEURS_PERSONNEL et aux listes RH_* dans assets/js/config.js).
-const DEMANDEURS_PERSONNEL = ['Yaya Comara', 'Zeinab Kone', 'Rita Kessie', 'Issa Kone', 'Jansenus Koffi', 'Axel Kouamenan'];
+const DEMANDEURS_PERSONNEL = ['Yaya Comara', 'Zeinab Kone', 'Rita Kessie', 'Issa Kone', 'Jansenus Koffi', 'Axel Kouamenan', 'Kader Soro'];
 const RH_NATURES = ['Création de poste', 'Remplacement (départ)', "Renforcement d'effectif", 'Stage', 'Prestataire / consultant', 'Intérim'];
 const RH_REMPLACEMENT = 'Remplacement (départ)';
 const RH_CONTRATS = ['CDI', 'CDD', 'Stage', 'Prestation', 'Intérim'];
@@ -294,6 +294,7 @@ function estMien_(s, b) {
 
 /** Nom du responsable qui valide ce besoin, 'Managers', ou '' si personne n'est désigné. */
 function valideurDe_(b) {
+  if (b.categorie === 'PERSONNEL') return ''; // les demandes de personnel sont enregistrées, sans validation
   if (POSTES_MANAGER.indexOf(b.poste) >= 0) return 'Managers';
   const noms = Object.keys(VALIDEURS);
   for (let i = 0; i < noms.length; i++) {
