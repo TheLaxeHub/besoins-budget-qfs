@@ -71,6 +71,7 @@ const PERSONNES_INIT = [
   ['Yaya Comara', 'Responsable', 'yaya.comara@cgi.ci'],
   ['Massandje Dagnoko', 'Responsable', 'massandje.dagnoko@cgi.ci'],
   ['Rita Kessie', 'Responsable', 'rita.kessie@cgi.ci'],
+  ['Alima Kone', 'Responsable', 'reine.kone@cgi.ci'],
   ['Issa Kone', 'Manager', 'issa.kone@cgi.ci'],
   ['Jansenus Koffi', 'Manager', 'jansenus.koffi@cgi.ci'],
 ];
@@ -85,7 +86,7 @@ const CATEGORIES = ['INFORMATIQUE', 'MOBILIER', 'ACHATS', 'PERSONNEL'];
 
 // Demandes de personnel (catégorie PERSONNEL, fiche besoins RH 2027) : réservées à ces personnes du siège
 // (à garder identique à DEMANDEURS_PERSONNEL et aux listes RH_* dans assets/js/config.js).
-const DEMANDEURS_PERSONNEL = ['Yaya Comara', 'Zeinab Kone', 'Rita Kessie', 'Issa Kone', 'Jansenus Koffi', 'Axel Kouamenan', 'Kader Soro'];
+const DEMANDEURS_PERSONNEL = ['Yaya Comara', 'Zeinab Kone', 'Rita Kessie', 'Issa Kone', 'Jansenus Koffi', 'Axel Kouamenan', 'Kader Soro', 'Alima Kone'];
 const RH_NATURES = ['Création de poste', 'Remplacement (départ)', "Renforcement d'effectif", 'Stage', 'Prestataire / consultant', 'Intérim'];
 const RH_REMPLACEMENT = 'Remplacement (départ)';
 const RH_CONTRATS = ['CDI', 'CDD', 'Stage', 'Prestation', 'Intérim'];

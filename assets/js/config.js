@@ -44,7 +44,7 @@ window.APP_CONFIG = {
     { libelle: 'Opérateur', siege: true, ico: 'headset', aide: 'Mes besoins', personnes: ['Isaac Kone', 'Yasmine Kamagate', 'Anne Adjo', 'Mohamed Cisse'] },
     { libelle: 'Assistant', siege: true, ico: 'clipboard-list', aide: 'Mes besoins', personnes: ['Aminata Sow', 'Kady Bakayoko'] },
     { libelle: 'Chef', siege: true, ico: 'user-cog', aide: 'Mes besoins', personnes: ['Axel Kouamenan', 'Kader Soro'] },
-    { libelle: 'Responsable', siege: true, ico: 'shield-check', aide: 'Besoins et validation', personnes: ['Zeinab Kone', 'Yaya Comara', 'Massandje Dagnoko', 'Rita Kessie'] },
+    { libelle: 'Responsable', siege: true, ico: 'shield-check', aide: 'Besoins et validation', personnes: ['Zeinab Kone', 'Yaya Comara', 'Massandje Dagnoko', 'Rita Kessie', 'Alima Kone'] },
     { libelle: 'Manager', siege: true, ico: 'crown', aide: 'Validation des responsables', personnes: ['Issa Kone', 'Jansenus Koffi'] },
   ],
 
@@ -111,7 +111,7 @@ window.APP_CONFIG = {
 
   // Personnes du siège autorisées à faire des demandes de personnel (catégorie PERSONNEL).
   // À garder identique à DEMANDEURS_PERSONNEL dans apps-script/Code.gs.
-  DEMANDEURS_PERSONNEL: ['Yaya Comara', 'Zeinab Kone', 'Rita Kessie', 'Issa Kone', 'Jansenus Koffi', 'Axel Kouamenan', 'Kader Soro'],
+  DEMANDEURS_PERSONNEL: ['Yaya Comara', 'Zeinab Kone', 'Rita Kessie', 'Issa Kone', 'Jansenus Koffi', 'Axel Kouamenan', 'Kader Soro', 'Alima Kone'],
   // Listes de la fiche RH (à garder identiques à Code.gs). Pour un remplacement, le poste remplacé est obligatoire.
   RH_REMPLACEMENT: 'Remplacement (départ)',
   RH_CONTRATS: ['CDI', 'CDD', 'Stage', 'Prestation', 'Intérim'],
