@@ -5,7 +5,7 @@
 window.APP_CONFIG = {
   // URL de l'application Web Google Apps Script (voir README, « Mise en service »).
   // Vide = MODE DÉMONSTRATION : les données restent dans le navigateur (pour tester l'interface).
-  API_URL: 'https://script.google.com/macros/s/AKfycbwhFUuy3jDPI4Se1CIA58k1YsbofPOU8Y5ZC5IWCR_gbxSeYy9GZTjL_CtOd4ANtiCE/exec',
+  API_URL: 'https://script.google.com/macros/s/AKfycbzMsODMCCEENVnooJb5zO4VmPaadIv7YAcsMIJ1un-AH2toxAjPDoU9szuZSQt3ixgr/exec',
 
   APP_TITRE: 'Expression des Besoins — Budget 2027',
   APP_SOUS_TITRE: 'QFS E-Money — Informatique, Mobilier & Achats',
