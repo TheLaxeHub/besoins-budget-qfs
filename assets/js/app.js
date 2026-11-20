@@ -66,7 +66,7 @@
   const estManager = function () { return !!S.session && S.session.poste === 'Manager'; };
   const peutDecider = function (b) { return !!S.session && Store.peutDecider(S.session, b); };
   const estMien = function (b) { return !!S.session && Store.estMien(S.session, b); };
-  const valideurTxt = function (b) { if (cat(b.categorie).rh) return 'aucune (demande de personnel)'; const v = Store.valideurDe(b); return v === 'Managers' ? 'les managers' : v || 'non désigné'; };
+  const valideurTxt = function (b) { const v = Store.valideurDe(b); if (cat(b.categorie).rh && !v) return 'aucune (demande de personnel)'; return v === 'Managers' ? 'les managers' : v || 'non désigné'; };
   const monValideur = function () { return valideurTxt({ poste: S.session.poste, demandeur: S.session.nom, demandeur_id: S.session.id }); };
   const equipTxt = function (b) { return b.annee_acquisition || b.etat_actuel ? [b.annee_acquisition ? 'Acquis en ' + b.annee_acquisition : '', b.etat_actuel].filter(Boolean).join(' · ') : ''; };
   const valideParMoi = function (b) { return !!S.session && !!S.session.id && (b.traite_par_id ? b.traite_par_id === S.session.id : String(b.traite_par).trim() === S.session.nom); };
@@ -82,7 +82,9 @@
   const peutRh = function () { return !!S.session && !!S.session.id && (C.DEMANDEURS_PERSONNEL || []).indexOf(S.session.nom) >= 0; };
   const catsSaisie = function () { return CATS.filter(function (c) { return !c.rh || peutRh(); }); };
   // Demande de personnel non traitée : simplement « Enregistrée » (pas de validation).
-  const rhEnregistree = function (b) { return estRh(b) && b.statut === 'EN_ATTENTE'; };
+  const rhEnregistree = function (b) { return estRh(b) && b.statut === 'EN_ATTENTE' && !Store.valideurDe(b); };
+  // Valideur de MES demandes de personnel ('' = enregistrées sans validation, cf. VALIDEURS_PERSONNEL).
+  const monValideurRh = function () { return Store.valideurDe({ categorie: 'PERSONNEL', poste: S.session.poste, demandeur: S.session.nom, demandeur_id: S.session.id }); };
   const badgeLigne = function (b) { return rhEnregistree(b) ? '<span class="badge" style="background:#fce7f3;color:#9d174d">Enregistrée</span>' : badgeStatut(b.statut); };
   const libStatut = function (b) { return rhEnregistree(b) ? 'Enregistrée' : (STATUTS[b.statut] || {}).libelle; };
   const rhTxt = function (b) { return estRh(b) ? [b.contrat, b.periode_entree, b.priorite ? 'Priorité ' + String(b.priorite).toLowerCase() : ''].filter(Boolean).join(' · ') : ''; };
@@ -1059,7 +1061,7 @@
         it('Rattachement (N+1)', esc(b.rattachement)) + it("Période d'entrée souhaitée", esc(b.periode_entree)) +
         it('Priorité', esc(b.priorite)) + it('Demandeur', esc(b.demandeur) + ' <span class="z">(' + esc(b.poste) + ')</span>') +
         it('Profil recherché', esc(b.profil), true) + it('Missions principales', esc(b.missions), true) +
-        it("Conséquence si le poste n'est pas pourvu", esc(b.consequence), true) + it('Validation', 'Aucune — demande enregistrée') +
+        it("Conséquence si le poste n'est pas pourvu", esc(b.consequence), true) + it('Validation', Store.valideurDe(b) ? 'Par ' + esc(Store.valideurDe(b)) : 'Aucune — demande enregistrée') +
       '</div><p class="pil" style="margin:12px 0 6px">Justification du besoin</p><div class="ptx">' + esc(b.motif) + '</div></div>' :
       '<div class="ps"><h3 class="pst">Le besoin</h3><div class="pg">' +
         it('Article', esc(b.libelle)) + it('Quantité demandée', '<b>' + nombre(b.quantite) + '</b>') +
@@ -1663,7 +1665,7 @@
   }
 
   function rendreDemande() {
-    $('#demWho').innerHTML = ico('user-round') + '<span>Au nom de <b>' + esc(S.session.nom) + '</b> · ' + esc(S.session.poste) + ' · ' + esc(S.session.site) + '<br>Validation par <b>' + esc(monValideur()) + '</b>' + (peutRh() ? ' · demandes de personnel enregistrées sans validation' : '') + '</span>';
+    $('#demWho').innerHTML = ico('user-round') + '<span>Au nom de <b>' + esc(S.session.nom) + '</b> · ' + esc(S.session.poste) + ' · ' + esc(S.session.site) + '<br>Validation par <b>' + esc(monValideur()) + '</b>' + (peutRh() ? (monValideurRh() ? ' · demandes de personnel validées par <b>' + esc(monValideurRh()) + '</b>' : ' · demandes de personnel enregistrées sans validation') : '') + '</span>';
     $('#demLignes').innerHTML = S.panier.length
       ? S.panier.map(htmlLigne).join('')
       : '<div class="dem-vide"><div class="dem-vide-ic">' + ico('mouse-pointer-click') + '</div><b>Votre demande est vide</b><span>Touchez un article du catalogue pour l\'ajouter.</span>' +
@@ -1716,10 +1718,13 @@
     if (!S.panier.length) return;
     const v = monValideur();
     const n = S.panier.length;
-    const nRh = S.panier.filter(estRh).length;
-    const aValider = n - nRh;
+    const vRh = monValideurRh();
+    const nRhVal = vRh ? S.panier.filter(estRh).length : 0;
+    const nRh = vRh ? 0 : S.panier.filter(estRh).length;
+    const aValider = n - nRh - nRhVal;
     const destination = function () {
       return [aValider ? aValider + ' transmis à <b>' + esc(v) + '</b> pour validation' : '',
+        nRhVal ? nRhVal + ' demande' + (nRhVal > 1 ? 's' : '') + ' de personnel transmise' + (nRhVal > 1 ? 's' : '') + ' à <b>' + esc(vRh) + '</b> pour validation' : '',
         nRh ? nRh + ' demande' + (nRh > 1 ? 's' : '') + ' de personnel enregistrée' + (nRh > 1 ? 's' : '') + ' sans validation' : ''].filter(Boolean).join(', ');
     };
     const ok = await confirmer({

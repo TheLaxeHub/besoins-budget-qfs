@@ -53,7 +53,15 @@
   const estMien = function (s, b) { return s.id ? b.demandeur_id === s.id : b.site === s.site && b.demandeur === s.nom && b.poste === s.poste; };
   // Nom du valideur d'un besoin (ou « Managers »). Mêmes règles que valideurDe_ dans Code.gs.
   const valideurDe = function (b) {
-    if (b.categorie === 'PERSONNEL') return ''; // demandes de personnel : enregistrées, sans validation
+    if (b.categorie === 'PERSONNEL') {
+      // Demandes de personnel : validées seulement pour les demandeurs de VALIDEURS_PERSONNEL, sinon enregistrées.
+      const vp = C.VALIDEURS_PERSONNEL || {};
+      const noms = Object.keys(vp);
+      for (let j = 0; j < noms.length; j++) {
+        if (b.demandeur_id && vp[noms[j]].indexOf(b.demandeur) >= 0) return noms[j];
+      }
+      return '';
+    }
     if (C.POSTES_MANAGER.indexOf(b.poste) >= 0) return 'Managers';
     const noms = Object.keys(C.VALIDEURS);
     for (let i = 0; i < noms.length; i++) {
@@ -64,7 +72,7 @@
     return '';
   };
   const estExporteur = function (s) { return !!s.id && (C.EXPORTEURS || []).indexOf(s.nom) >= 0; };
-  const estValideur = function (s) { return s.poste === 'Manager' || (s.poste === 'Responsable' && !!C.VALIDEURS[s.nom]); };
+  const estValideur = function (s) { return s.poste === 'Manager' || (s.poste === 'Responsable' && (!!C.VALIDEURS[s.nom] || !!(C.VALIDEURS_PERSONNEL || {})[s.nom])); };
   const peutDecider = function (s, b) {
     const v = valideurDe(b);
     if (s.poste === 'Manager') return v === 'Managers';
